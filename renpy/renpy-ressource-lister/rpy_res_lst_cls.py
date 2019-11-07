@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
 A program for listing defined ren'py ressourses.
@@ -11,7 +11,6 @@ The subdirectories will be searched and the content written to a file.
 # pylint: disable=w0511, C0103, C0301
 
 import os
-# import os.path
 import sys
 from pathlib import Path
 import argparse
