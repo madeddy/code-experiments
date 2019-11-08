@@ -6,8 +6,7 @@ This repo holds some of my learning experience with coding. Don't expect much. Y
 * Python
   * Convert2webp
   * Pathfinding experiments
-  * Ren'py
-    * Some mini scripts
-    * Renpy Resource Lister
-* Shell
-
+* Ren'py
+  * Some mini scripts
+  * Renpy Resource Lister
+* Shell _later.. perhaps_
