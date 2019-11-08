@@ -6,6 +6,7 @@ Supported formats are:
 - tiff
 - gif
 - webp
+
 The latter is mentioned because it can be reconverted in a different quality setting.
 
 There are three different coding try's/concepts here for this:
