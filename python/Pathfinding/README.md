@@ -17,4 +17,4 @@ Also there besides the code are two prepared images i use for experimental run's
   * Step 2. `search_p.py graph/graph.pickle`
 
 ---
-_The code for the graph construction is influenced by the diskussion for a pathfinding contest on itch.io some years ago and naturaly the excelent source on  Amit Patel's site [Red Blob Games](https://www.redblobgames.com)._
+_The code for the graph construction is influenced by the diskussion for a pathfinding mission on py.checkio.org some years ago and naturaly the excellent explainations on Amit Patel's site [Red Blob Games](https://www.redblobgames.com)._
