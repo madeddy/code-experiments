@@ -13,8 +13,8 @@ Also there besides the code are two prepared images i use for experimental run's
   * Step 2. `path_search.py graph_file.h5`
 
 * Variant 3:
-  * Step 1. `imgmask2graph.py mask_image`
-  * Step 2. `search_p.py graph/graph.pickle`
+  * Step 1. `maze2graph.py mask_image`
+  * Step 2. `astar_search.py graph/graph.pickle`
 
 ---
 _The code for the graph construction is influenced by the diskussion for a pathfinding mission on py.checkio.org some years ago and naturaly the excellent explainations on Amit Patel's site [Red Blob Games](https://www.redblobgames.com)._
