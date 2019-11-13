@@ -7,22 +7,21 @@ constructs from it a graph representation of the the walkable area.
 
 # pylint: disable=w0511, C0103, C0301, r1710
 
-import sys
-from pathlib import Path
+
 import argparse
 import pprint
-import pickle
-import timeit
+import sys
+from pathlib import Path
 from textwrap import dedent
-
 import numpy as np
 from PIL import Image
+import dill as pickle
 
 __title__ = 'maze2graph'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.21.0-alpha'
+__version__ = '0.22.0-alpha'
 
 
 def control(mtrx_arr, graphdict):
@@ -54,42 +53,43 @@ class M2G:
     '''Main class for all graph building related functionality.'''
 
     def __init__(self, maskimg):
-        self.matrix = np.array
-        self.gridsize = ()
+        self.mtrx = np.array([[]])
+        self.gsy, self.gsx = 0, 0
         self.graph = {}
         self.img_mask2matrix(maskimg)
 
-    def img_mask2matrix(self, mask_img):
+    def img_mask2matrix(self, maskimg):
         '''This reads a given image in, converting it to 8 bit RGB(from 24bit)
            and then into a numpy array.
         '''
-        imgread = Image.open(mask_img)
-
+        imgread = Image.open(maskimg)
         # Convert colors to 8 bit
         mask_img256 = imgread.convert('P')
-        self.matrix = np.array(mask_img256)
-        self.gridsize = self.matrix.shape
+        self.mtrx = np.array(mask_img256)
+        self.gsy, self.gsx = self.mtrx.shape
+
+    def add_node(self, node):
+        """Adds the given node to the graph if containment check is negativ. Format is e.g.: {(12, 654), []}"""
+        if not self.has_node(node):
+            self.graph[node] = []
+
+    def has_node(self, node):
+        """Checks if the given node is in the graph."""
+        # print(node)
+        if node not in self.graph.keys():
+            return False
+        return True
 
     @staticmethod
     def tup_add(tup1, tup2):
         '''This is a helper to add int values in two tuples up.'''
         return tuple(x + y for x, y in zip(tup1, tup2))
 
-    def add_node(self, node):
-        """Adds the given node to the graph if containment check is negativ. Format is e.g.: {(12, 654), []}"""
-
-        if node not in self.graph.keys():
-            self.graph[node] = []
-
-    def has_node(self, node):
-        """Check if a "node" is in the graph."""
-        return bool(node in self.graph.keys())
-
     def chk_pos(self, node):
         '''Helper to check the status of the the given node.'''
-        # [(b < n < g) for b, n, g in zip((0, 0), node, self.gridsize)]
-        return bool(0 < node[0] < self.gridsize[0]
-                    and 0 < node[1] < self.gridsize[1])
+        if not self.gsy > node[0] and not node[0] > 0 and not self.gsx > node[1] and not node[1] > 0:
+            return False
+        return True
 
     def add_link(self, src_n):
         '''This adds the found links between nodes to the graph.
@@ -106,26 +106,6 @@ class M2G:
                 self.graph[src_n].append((dest_n, d1_name))
                 self.graph[dest_n].append((src_n, d2_name))
 
-        # dirs = [['NE', (-1, 1)], ['SW', (1, -1)],
-        #         ['E', (0, 1)], ['W', (0, -1)],
-        #         ['SE', (1, 1)], ['NW', (-1, -1)],
-        #         ['S', (1, 0)], ['N', (-1, 0)]]
-        #
-        # for dir_name, dir_val in dirs:
-        #     dest_n = self.tup_add(src_n, dir_val)
-        #     if 0 < dest_n[0] < self.gridsize[0] and 0 < dest_n[1] < self.gridsize[1] and dest_n in self.graph:
-        #         self.graph[src_n].append((dest_n, dir_name))
-
-        # '''old code'''
-        # dirs = [[-1, 1], [0, 1], [1, 1], [1, 0]]
-        # for _dir in dirs:
-        #     dest_n = (src_n[0] + _dir[0], src_n[1] + _dir[1])
-        #
-        #     if 0 < dest_n[0] < self.gridsize[0] and 0 < dest_n[1] < self.gridsize[1] and dest_n in self.graph:
-        #
-        #         self.graph[src_n].append(dest_n)
-        #         self.graph[dest_n].append(src_n)
-
     def maze2graph(self):
         '''
         Builds a simple graph dict from a maze/map array. The cells of
@@ -134,47 +114,42 @@ class M2G:
 
         The structure looks like this:
         {(23, 8): [((23, 9), 'E'), ((24, 9), 'SE'), ...],
-        (23, 9): [( )...], ...}
+        (23, 9): [(23, 8)...], ...}
         '''
-        # untested -> i,j reversed in the loops?
-        # self.add_node((i, j) for i in range(self.gridsize[0]) for j in range(self.gridsize[1]) if self.mask[i][j] != 0)
-        # collect cell cordinates as dict keys
-        for i in range(self.gridsize[0]):
-            for j in range(self.gridsize[1]):
+
+        for i in range(self.gsy):
+            for j in range(self.gsx):
                 # filter unwalkable cells out
-                if self.matrix[i][j] != 0:
+                if self.mtrx[i][j] != 0:
                     self.add_node((i, j))
 
-        start = timeit.default_timer()
-        #
         for node in self.graph:
             self.add_link(node)
 
-        # some control functions
-        print(timeit.default_timer() - start)
-
-        print(len(self.graph.keys()))
-        print(sum(map(len, self.graph.values())))
+        keycount = (len(self.graph.keys()))
+        valcount = (sum(map(len, self.graph.values())))
         # return of matrix is only for control used
-        return self.graph, self.gridsize, self.matrix
+        return self.graph, (self.gsy, self.gsx), self.mtrx, keycount, valcount
 
 
-def store_data(graphdict, gridsize):
+def store_data(graphdict, gridsize, keycount, valcount):
     """Writes the graph and the variable `gridsize´ to files."""
 
     if not Path('graphdata').exists():
         Path('graphdata').mkdir(parents=True, exist_ok=True)
     with open('graphdata/graph.pickle', 'wb') as nfi:
-        pickle.dump(graphdict, nfi)
+        pickle.dump(graphdict, nfi, protocol=pickle.HIGHEST_PROTOCOL)
 
-    filehead = ("""\
+    filehead = (f"""\
     # -*- coding: utf-8 -*-
 
     \"\"\"Module for reusable storage of a variable.\"\"\"
 
-    gridsize =""")
-    with open('graphdata/gridsize.py', 'w') as nfi:
-        print(dedent(filehead), gridsize, file=nfi)
+    gridsize = {gridsize}
+    key_count = {keycount}
+    value_count = {valcount}""")
+    with open('graphdata/graphinfo.py', 'w') as nfi:
+        print(dedent(filehead), file=nfi)
 
 
 def get_args():
@@ -194,7 +169,8 @@ def get_args():
             print('Input must be a PIL supported image file.')
         return in_file
 
-    parser = argparse.ArgumentParser(description='Turns a image used as mask into a pickel file with the stored graph.')
+    parser = argparse.ArgumentParser(
+        description='Turns a image used as mask into a pickel file with the stored graph.')
     parser.add_argument('imgfile', action='store', type=valid_img,
                         metavar='Image file',
                         help='Image file for processing.')
@@ -205,11 +181,10 @@ def main(cfg):
     '''... main function.'''
 
     m2g = M2G(cfg.imgfile)
-    graphdict, gridsize, mtrx_arr = m2g.maze2graph()
-
-    store_data(graphdict, gridsize)
+    graphdict, gridsize, mtrx_arr, keycount, valcount = m2g.maze2graph()
 
     control(mtrx_arr, graphdict)
+    store_data(graphdict, gridsize, keycount, valcount)
 
 
 if __name__ == '__main__':
