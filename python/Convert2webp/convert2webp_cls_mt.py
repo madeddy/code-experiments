@@ -12,11 +12,18 @@ import os
 import sys
 import argparse
 import shutil
-from pathlib import Path
+from pathlib import Path as pt
 from multiprocessing import Pool
 from PIL import Image
 import magic
 import tqdm
+
+
+__title__ = 'Convert to Webp'
+__license__ = 'MIT'
+__author__ = 'madeddy'
+__status__ = 'Development'
+__version__ = '0.8.0-alpha'
 
 
 class C2W:
@@ -24,31 +31,35 @@ class C2W:
 
     src_f = ''
     file_count = [0, 0]
-    ext_list = ['png', 'jpeg', 'jpg', 'gif', 'tiff', 'tif']
+    ext_list = {'png', 'jpeg', 'jpg', 'gif', 'tiff', 'tif'}
 
     def __init__(self, conv_dir, recode_webp, quali, treat_orgs=None):
         self.conv_dir = conv_dir
-        self.quali = quali
+        self.quali = {'quality': 80}
+        if quali is True:
+            self.quali = {'lossless': quali}
+        elif isinstance(quali, int):
+            self.quali = {'quality': quali}
         self.treat_orgs = treat_orgs
 
-        self.bup_dir = Path(self.conv_dir).joinpath('img_backup')
+        self.bup_dir = pt(self.conv_dir).joinpath('img_backup')
         C2W.set_ext_list(recode_webp)
 
     @classmethod
     def set_ext_list(cls, recode_webp):
         """Sets the the file extension lists state."""
         if recode_webp:
-            cls.ext_list.append('webp')
+            cls.ext_list.add('webp')
 
     def backup_originals(self, src_file):
         """Clones the dir structure in a bup dir and moves given files there."""
 
-        dest_file = Path(self.bup_dir).joinpath(
-            Path(src_file).relative_to(self.conv_dir))
-        dest_file_par = Path(dest_file).parent
+        dest_file = pt(self.bup_dir).joinpath(
+            pt(src_file).relative_to(self.conv_dir))
+        dest_file_par = pt(dest_file).parent
 
-        if not Path(dest_file_par).exists():
-            Path(dest_file_par).mkdir(parents=True, exist_ok=True)
+        if not pt(dest_file_par).exists():
+            pt(dest_file_par).mkdir(parents=True, exist_ok=True)
 
         shutil.move(src_file, dest_file)
 
@@ -75,7 +86,7 @@ class C2W:
 
             for fln in files:
 
-                C2W.src_f = Path(path).joinpath(fln)
+                C2W.src_f = pt(path).joinpath(fln)
                 m_type, f_type = self.get_mimetype()
 
                 if m_type != 'image' or f_type not in C2W.ext_list:
@@ -84,14 +95,13 @@ class C2W:
 
                 if f_type == 'gif' and self.test_gifani() is True:
                     # Skip animated gifs; convert is broken
-                    # dst_f = Path(mp_conv_f).with_suffix('.webp')
+                    # dst_f = pt(mp_conv_f).with_suffix('.webp')
                     # try:
-                    #     Image.open(C2W.src_f).save(dst_f, 'webp', save_all=True, lossless=self.quali[0], quality=self.quali[1], method=3)
+                    #     Image.open(C2W.src_f).save(dst_f, 'webp', save_all=True, self.quali, method=6)
                     # except IOError:
                     #     print(f'"Could not convert: {C2W.src_f}')
                     # C2W.file_count[0] += 1
                     C2W.file_count[1] += 1
-                    continue
 
                 else:
                     C2W.file_count[0] += 1
@@ -102,10 +112,11 @@ class C2W:
     def mp_worker(self, mp_conv_f):
         """Convert method with multiprocessing capapility."""
 
-        mp_dst_f = Path(mp_conv_f).with_suffix('.webp')
+        mp_dst_f = pt(mp_conv_f).with_suffix('.webp')
 
         try:
-            Image.open(mp_conv_f).save(mp_dst_f, 'webp', lossless=self.quali[0], quality=self.quali[1], method=3)
+            # Image.open(mp_conv_f).save(mp_dst_f, 'webp', lossless=self.quali[0], quality=self.quali[1], method=3)
+            Image.open(mp_conv_f).save(mp_dst_f, 'webp', **self.quali, method=3)
         except IOError:
             print(f'"Could not convert: "{mp_conv_f}')
 
@@ -113,13 +124,13 @@ class C2W:
             self.backup_originals(mp_conv_f)
 
         if self.treat_orgs == 'erase' and \
-                Path(mp_conv_f).suffix != 'webp':
-            Path(mp_conv_f).unlink()
+                pt(mp_conv_f).suffix != 'webp':
+            pt(mp_conv_f).unlink()
 
     def conv2webp(self):
         """This manages all processing steps."""
 
-        if Path(self.bup_dir).exists():
+        if pt(self.bup_dir).exists():
             raise FileExistsError('Backup dir already exist.')
 
         conv_img_list = self.dirwalker()
@@ -140,9 +151,9 @@ def parse_args():
 
     def check_dir_path(dir_path):
         """Check if given path exist and is a dir."""
-        if not Path(dir_path).exists():
+        if not pt(dir_path).exists():
             raise FileNotFoundError(dir_path)
-        if not Path(dir_path).is_dir():
+        if not pt(dir_path).is_dir():
             raise NotADirectoryError(dir_path)
         return dir_path
 
@@ -160,9 +171,9 @@ def parse_args():
                         help='Directory path with images for processing.')
 
     switch = parser.add_mutually_exclusive_group()
-    switch.add_argument('-l', action='store_true', dest='loss',
+    switch.add_argument('-l', action='store_true', dest='qua',
                         default=False, help='Set quality to lossless.')
-    switch.add_argument('-q', type=valid_nr, dest='qua', default=80,
+    switch.add_argument('-q', type=valid_nr, dest='qua',
                         help='Set quality to lossy. Value 0-100')
 
     org = parser.add_mutually_exclusive_group()
@@ -175,30 +186,26 @@ def parse_args():
                         default=False,
                         help='Re-/Encode also webp images. e.g lossless to lossy')
     parser.add_argument('--version', action='version',
-                        version='%(prog)s 0.7.0-alpha')
+                        version=f'%(prog)s : { __title__} {__version__}')
     return parser.parse_args()
 
 
 def main(cfg):
     """Main block with some info messages."""
 
-    if not cfg.loss and cfg.qua == 80:
-        inf_line = f'Encoding stays at standard: lossy, with quality 80.'
-    elif cfg.loss:
-        inf_line = 'Encoding is set to lossless.'
-    elif cfg.qua != 80:
-        inf_line = f'Quality factor set to: {cfg.qua!s}'
-    print(f'Animated gif\'s will be skipped. Convert is broken!\n{inf_line} >> Processing starts.')
-
     # import timeit
     # start_t = timeit.default_timer()
 
-    C2W(cfg.dir, cfg.r_webp, (cfg.loss, cfg.qua), cfg.treat_orgs).conv2webp()
+    if not cfg.qua:
+        inf_line = f'Encoding stays at standard: lossy, with quality 80.'
+    elif cfg.qua is True:
+        inf_line = 'Encoding is set to lossless.'
+    elif isinstance(cfg.qua, int):
+        inf_line = f'Quality factor set to: {cfg.qua!s}'
+    print(f'Animated gif\'s will be skipped. Convert is broken!\n{inf_line} >> Processing starts.')
+    C2W(cfg.dir, cfg.r_webp, cfg.qua, cfg.treat_orgs).conv2webp()
 
     # print(str(timeit.default_timer() - start_t))
-
-    # c2w = C2W(cfg.dir, cfg.r_webp, (cfg.loss, cfg.qua), cfg.treat_orgs)
-    # c2w.conv2webp()
 
 
 if __name__ == '__main__':
