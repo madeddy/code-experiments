@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
-A program for listing defined ren'py ressourses.
+A small program for listing defined Ren'Py ressourses.
 
-It is intended to be executed in the renpy's game directory below the asset
+It is intended to be executed in the Ren'pys game directory below the asset
 dirs (images, audio).
 The subdirectories will be searched and the content written to a file.
 """
@@ -45,10 +45,10 @@ __version__ = '0.14.0-alpha'
 
 class RRL:
     """The class for all ressource defining related functionality."""
-
+    verbosity = 1
     tmp_lst = []
 
-    def __init__(self, inp, outfile, verbosity=1):
+    def __init__(self, inp, outfile, verbose=None):
         self.inpdir = inp[0]
         try:
             assert inp[1] in ['image', 'audio', 'video']
@@ -56,7 +56,7 @@ class RRL:
             print('Wrong type given.', error)
         self.typus = inp[1].lower()
         self.outfile = outfile
-        self.verbosity = verbosity
+        RRL.verbosity = verbose
 
         self.valid_path()
         self.valid_outfile()
@@ -65,56 +65,51 @@ class RRL:
         self.test_register_file()
         # self.open_of = open(outfile, 'w')
 
-    def inf(self, verbose_level, message, warn=False):
+    @classmethod
+    def inf(cls, inf_level, message, warn=False):
         """Outputs the infos allowed for the current verbosity level."""
-        if self.verbosity >= verbose_level:
+        if cls.verbosity >= inf_level:
             mes_sort = 'INFO'
             if warn:
                 mes_sort = 'WARNING'
-            print(f'RRL {mes_sort}: {message}')
+            print(f"RRL {mes_sort}: {message}")
 
     def valid_path(self):
         """This tests if the given directory exists."""
         if not pt(self.inpdir).is_dir():
-            raise OSError(f'Directory \"{self.inpdir}\" does not exist.')
+            raise OSError(f"Directory {self.inpdir!r} does not exist.")
 
     def valid_outfile(self):
         """This tests if the given output filename is acceptable."""
         if pt(self.outfile).suffix != '.rpy':
-            raise ValueError('Output filename must have rpy extension.')
+            raise ValueError("Output filename must have rpy extension.")
 
         for char in [':', ' ']:
             if char in self.outfile:
-                raise OSError(f'\"{self.outfile}\" contains unallowed charakter.')
+                raise OSError(f"\"{self.outfile}\" contains unallowed charakter.")
 
     def check_defaults(self):
         """Checks if default values are used and informs if verbosity=2."""
-
         if self.outfile == 'ressource_def.rpy':
-            self.inf(2, f'>> Output filename set to default: <{self.outfile}>.')
+            self.inf(2, f">> Output filename set to default: <{self.outfile}>.")
         # FIXME: Used like this the dirs can be mixed up with the type
         if self.inpdir == 'images' or self.inpdir == 'audio' or self.inpdir == 'video':
-            self.inf(2, f'{self.typus.title()} directory set to default: <{self.inpdir}>.')
+            self.inf(2, f"{self.typus.title()} directory set to default: <{self.inpdir}>.")
 
     def test_register_file(self):
+        """Tests if the given output filename already exists and makes
+        a backup.
         """
-        Tests if a file with the given output filename already exists and
-        if true makes a backup.
-        """
-
         if pt(self.outfile).is_file():
             timestamp = strftime('%d%b%Y_%H:%M:%S', localtime())
             pt(self.outfile).rename(pt(self.outfile).with_suffix('.' + timestamp + '.bup'))
 
-            self.inf(1, f'>> Target file {self.outfile} already exists. Performed backup. Original file has now extension <bup>.')
+            self.inf(1, f">> Target file {self.outfile} already exists. Performed " \
+                     "backup. Original file has now extension <bup>.")
             sleep(1)
 
     def write_register_list(self):
-        """
-        Writes a intro message and the content of the register list to
-        the file.
-        """
-
+        """Writes a intro and the content of the register list to the file."""
         header_text = ("""\
         # REN'PY ASSET LIST
         # Below are the project assets with the renpy <asset_type>
@@ -124,14 +119,12 @@ class RRL:
 
         # print(textwrap.dedent(header_text), file=self.open_of)
         # print(*self.tmp_lst, sep='\n', file=self.open_of)
-
-        self.inf(2, f'>> List was written to file {self.outfile} in directory\n{os.getcwd()}')
-
         with open(self.outfile, 'w') as ofi:
             print(textwrap.dedent(header_text), file=ofi)
             print(*self.tmp_lst, sep='\n', file=ofi)
 
         # print(*self.tmp_lst, sep='\n')
+        self.inf(2, f">> List was written to file {self.outfile!r} in directory\n{pt.cwd()}")
 
     def format_test(self, testobj):
         """
@@ -139,7 +132,6 @@ class RRL:
         type. Negatives are skipped, positives again checked if their extension
         is supported or not. Returns this status.
         """
-
         supp_state = None
         if pt(testobj).is_file():
             m_type, f_type = magic.from_file(
@@ -158,7 +150,6 @@ class RRL:
                 supp_state = 'supported'
             else:
                 supp_state = 'unsupported'
-
         return supp_state
 
     def typus_statement(self, cur_dir, rel_path, fn_base):
@@ -166,7 +157,6 @@ class RRL:
         This supports the dir lister by constructing the define statements for
         the actual asset typus.
         """
-
         alias_sep = '_'
         if self.typus == 'image':
             dcl_base = 'image '
@@ -180,21 +170,20 @@ class RRL:
 
         dcl_right = rel_path
         if self.typus == 'video':
-            dcl_right = f'Movie(play="{rel_path}")'
+            dcl_right = f"Movie(play='{rel_path}')"
 
-        return f'{dcl_left} = "{dcl_right}"'
+        return f"{dcl_left} = '{dcl_right}'"
 
     def dir_lister(self):
         """This finds, filters and lists all elements in the given path."""
-
-        self.tmp_lst.append(f'\n\n# {self.typus.title()} section {"#" * 64}\n')
+        self.tmp_lst.append(f"\n\n# {self.typus.title()} section {'#' * 64}\n")
 
         unsup_count = 0
         for path, dirs, files in os.walk(self.inpdir):
             dirs = humansorted(dirs)
-            subdirs = f' with subdirectorys: {", ".join(dirs)}'
+            subdirs = f" with subdirectorys: {', '.join(dirs)}"
             # TODO: rrl should not write empty dirs in the outfile
-            self.tmp_lst.append(f'# ### Current directory: {path}/{subdirs if dirs else ""}')
+            self.tmp_lst.append(f"# ### Current directory: {path}/{subdirs if dirs else None}")
 
             files = humansorted(files)
             cur_dir = pt(path).name
@@ -214,17 +203,17 @@ class RRL:
                     continue
 
         if unsup_count > 0:
-            self.inf(1, f'The directory contains {unsup_count!s} {self.typus} file(s) of non-supported type.')
+            self.inf(1, f"The directory contains {unsup_count!s} {self.typus} file(s) of non-supported type.")
 
         self.write_register_list()
 
 
 def parse_args():
     """
-    Standard argument parser. Checks if at least one of the required
-    switches is present.
+    Argument parser and test for input path to provide functionality for the
+    command line interface. Also ensures that at least one of the required switches
+    is present.
     """
-
     def check_dir_path(dir_path):
         """Helper function to make sure given path is a dir."""
         if not pt(dir_path).is_dir() or pt(dir_path).is_symlink():
@@ -234,44 +223,61 @@ def parse_args():
     def valid_switch():
         """Helper function to determine if a switch is set."""
         if not args.def_img and not args.def_aud and not args.def_vid:
-            parser.print_help()
-            raise parser.error('\nNo task requested; either -i, -a or -v is required.')
+            aps.print_help()
+            raise argparse.ArgumentError('', "\nNo task requested; either -i, -a or -v is required.")
 
-    parser = argparse.ArgumentParser(
-        add_help=False, description='A program for listing ren`py ressources.\nEXAMPLE USAGE: res_def.py -i -idir all_img -o mylist.rpy',
+    aps = argparse.ArgumentParser(
+        add_help=False,
+        description='A program for listing ren`py ressources.\nEXAMPLE USAGE: res_def.py -i -idir all_img -o mylist.rpy',
         epilog='One of the switches must be set or the program exits. The other options have default values which are used if they are not set.')
 
-    switch = parser.add_argument_group('Switches', 'Activate search and listing of the respective filetype.\nOne is at least required!')
-    switch.add_argument('-i', nargs='?', dest='def_img', const='images',
-                        default=None, help='Activate image file search')
-    switch.add_argument('-a', nargs='?', dest='def_aud', const='audio',
-                        default=None, help='Activate audio file search')
-    switch.add_argument('-v', nargs='?', dest='def_vid', const='video',
-                        default=None, help='Activate video file search')
-    parser.add_argument('-dir', type=check_dir_path,
-                        help='Directory path to search.')
-    parser.add_argument('-o', action='store', dest='outfile',
-                        default='ressource_def.rpy', metavar='Output file',
-                        help='Name for the output file')
-    parser.add_argument('--verbose', dest='verbosity', default=1, type=int,
-                        choices=range(0, 3), metavar='Verbosity level [0-2]',
-                        help='Amount of info output. default:1')
-    parser.add_argument('--version', action='version',
-                        version=f'%(prog)s : { __title__} {__version__}')
-    parser.add_argument('--help', '-h', action='help',
-                        help='Show this help message and exit')
-    args = parser.parse_args()
+    switch = aps.add_argument_group('Switches', 'Activate search and listing of the respective filetype.\nOne is at least required!')
+    switch.add_argument('-i', nargs='?',
+                        dest='def_img',
+                        const='images',
+                        default=None,
+                        help='Activate image file search')
+    switch.add_argument('-a', nargs='?',
+                        dest='def_aud',
+                        const='audio',
+                        default=None,
+                        help='Activate audio file search')
+    switch.add_argument('-v', nargs='?',
+                        dest='def_vid',
+                        const='video',
+                        default=None,
+                        help='Activate video file search')
+    aps.add_argument('-dir',
+                     type=check_dir_path,
+                     help='Directory path to search.')
+    aps.add_argument('-o',
+                     action='store',
+                     dest='outfile',
+                     default='ressource_def.rpy',
+                     metavar='Output file',
+                     help='Name for the output file')
+    aps.add_argument('--verbose',
+                     type=int,
+                     choices=range(0, 3),
+                     metavar='Verbosity level [0-2]',
+                     help='Amount of info output. default:1')
+    aps.add_argument('--version',
+                     action='version',
+                     version=f"%(prog)s : { __title__} {__version__}")
+    aps.add_argument('--help', '-h',
+                     action='help',
+                     help='Show this help message and exit')
+    args = aps.parse_args()
     valid_switch()
     return args
 
 
 def rrl_main(cfg):
-    """
-    This executes all program steps, does some valitity checks on the args and
-    prints some infos messages if the default args are used.
+    """This executes all program steps, validity checks on the args and prints
+    infos messages if the default args are used.
     """
 
-    print('configs', cfg.def_img, cfg.def_aud, cfg.def_vid)
+    print("configs", cfg.def_img, cfg.def_aud, cfg.def_vid)
     # if cfg.def_img:
     #     rrl_img = RRL(cfg.def_img, 'image', cfg.outfile, cfg.verbosity)
     #     rrl_img.dir_lister()
@@ -287,13 +293,13 @@ def rrl_main(cfg):
         med_arg = cfg.def_aud, 'audio'
     elif cfg.def_vid:
         med_arg = cfg.def_vid, 'video'
-    rrl = RRL(med_arg, cfg.outfile, cfg.verbosity)
+    rrl = RRL(med_arg, cfg.outfile, cfg.verbose)
     rrl.dir_lister()
 
-    print('\n>> Completed!\n')
+    print("\n>> Completed!\n")
 
 
 if __name__ == '__main__':
-    if not sys.version_info >= (3, 6):
-        raise ValueError("Python 3.6 or higher needet.")
+    assert sys.version_info >= (3, 6), \
+        f"Must be executed in Python 3.6 or later. You are running {sys.version}"
     rrl_main(parse_args())
