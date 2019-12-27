@@ -4,8 +4,9 @@
 # Converting is resticted to the possible input formats png, jpeg, tiff,
 # gif for webp.
 
-# pylint: disable=c0301, w0612
-# too many variables R0914 # to many branchces R0914
+# pylint: disable=c0301
+# , w0612
+# too many variables R0914 # to many branches R0914
 
 import os
 import sys
@@ -125,52 +126,71 @@ def convert_img(conv_dir, recode_webp, quali, treat_orgs=None):
 
 def parse_args():
     """Gets the arguments."""
-
     def check_dir_path(dir_path):
-        """Helper for check if given path is a dir."""
-        if not Path(dir_path).is_dir:
+        """Check if given path exist and is a dir."""
+        if not pt(dir_path).is_dir() or pt(dir_path).is_symlink():
             raise NotADirectoryError(dir_path)
         return dir_path
 
     def valid_nr(inp):
-        """Function for validating the users input of a number."""
+        """Validates the users input of a number."""
         input_nr = int(inp)
         if not 0 <= input_nr <= 100:
-            raise ValueError('Invalid input. Use a number between 0 and 100.')
+            raise ValueError("Invalid number input for quality argument.")
         return input_nr
 
-    parser = argparse.ArgumentParser(description='A program for converting tiff, png, jpeg, gif images to webp or encode webp anew.\nEXAMPLE USAGE: convert_to_webp.py -q 90', epilog='The switches are optional. Without one of them the default quality is lossy -q 75 and the orginal files will be keeped.')
-    parser.add_argument('-dir', type=check_dir_path,
-                        help='Directory path with images for processing.')
-    switch = parser.add_mutually_exclusive_group()
-    switch.add_argument('-l', action='store_true', dest='loss', default=False,
+    aps = argparse.ArgumentParser(
+        description='A program for converting tiff, png, jpeg, gif images to webp or encode webp anew.\nEXAMPLE USAGE: convert_to_webp.py -q 90',
+        epilog='The switches are optional. Without one of them the default quality is lossy -q 80 and the orginal files will be keeped.')
+    aps.add_argument('-dir',
+                     type=check_dir_path,
+                     help='Directory path with images for processing.')
+    switch = aps.add_mutually_exclusive_group()
+    switch.add_argument('-l',
+                        action='store_true',
+                        dest='qua',
                         help='Set quality to lossless.')
-    switch.add_argument('-q', type=valid_nr, dest='qua', default=80,
+    switch.add_argument('-q',
+                        type=valid_nr,
+                        dest='qua',
                         help='Set quality to lossy. Value 0-100')
-    org = parser.add_mutually_exclusive_group()
-    org.add_argument('-e', action='store_const', dest='treat_orgs',
-                     const='erase', help='Erase orginal files.')
-    org.add_argument('-b', action='store_const', dest='treat_orgs',
-                     const='backup', help='Backup orginal files.')
-    # parser.set_defaults(treat_orgs='keep')
-    parser.add_argument('-w', action='store_true', dest='r_webp',
-                        default=False,
-                        help='Re-/Encode also webp images.')
-    parser.add_argument('--version', action='version',
-                        version='%(prog)s 0.7.0-alpha')
-    return parser.parse_args()
+    org = aps.add_mutually_exclusive_group()
+    org.add_argument('-e',
+                     action='store_const',
+                     dest='treat_orgs',
+                     const='erase',
+                     help='Erase orginal files.')
+    org.add_argument('-b',
+                     action='store_const',
+                     dest='treat_orgs',
+                     const='backup',
+                     help='Backup orginal files.')
+    aps.add_argument('-w',
+                     action='store_true',
+                     dest='r_webp',
+                     help='Re-/Encode also webp images. e.g lossless to lossy')
+    aps.add_argument('--version',
+                     action='version',
+                     version=f'%(prog)s : { __title__} {__version__}')
+    return aps.parse_args()
 
 
 def main(cfg):
     """Main function with some checks for the convert process."""
-
-    if not cfg.loss and cfg.qua == 80:
-        print(f'Encoding stays at standard: lossy, with quality 80.')
-    elif cfg.loss:
-        print('Encoding is set to lossless.')
-    elif cfg.qua != 80:
-        print(f'Quality factor set to: {cfg.qua!s}')
     convert_img(cfg.dir, cfg.r_webp, (cfg.loss, cfg.qua), cfg.treat_orgs)
+    # TODO: add -mixed compression mode for animated images
+    # TODO: look into adding raw Y'CbCr samples encoding
+    if not cfg.qua:
+        inf_line = f'Encoding stays at standard: lossy, with quality 80.'
+    elif cfg.qua is True:
+        inf_line = 'Encoding is set to lossless.'
+    elif isinstance(cfg.qua, int):
+        inf_line = f'Quality factor set to: {cfg.qua!s}'
+
+    print(f"Converted animated gif\'s should be checked over. Output is mostly broken!\n"
+          f"{inf_line} >> Processing starts.")
+
+    # print(str(timeit.default_timer() - start_t))
 
 
 if __name__ == '__main__':
