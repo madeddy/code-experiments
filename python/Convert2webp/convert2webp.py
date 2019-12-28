@@ -4,128 +4,163 @@
 # Converting is resticted to the possible input formats png, jpeg, tiff,
 # gif for webp.
 
-# pylint: disable=c0301
-# , w0612
-# too many variables R0914 # to many branches R0914
+# pylint: disable=c0301, w0511, c0123
+# c0123 type instead isinstance
+# w0511 codetags # too many arguments R0913 # to many branches R0914
 
 import os
 import sys
 import argparse
-from pathlib import Path
 import shutil
-import magic
-from PIL import Image
+from pathlib import Path as pt
+import multiprocessing as mp
+try:
+    from PIL import Image
+    import magic
+    import tqdm
+except ImportError:
+    raise f"The packages 'Pillow', 'python-magic' and 'tqdm' must be installed " \
+           "to run this program."
+
+__title__ = 'Convert to Webp'
+__license__ = 'MIT'
+__author__ = 'madeddy'
+__status__ = 'Development'
+__version__ = '0.10.0-alpha'
 
 
-def backup_originals(src_file, conv_dir):
-    """Clones the dir structure in a bup dir and moves given files there."""
+class C2W:
+    """The class for converting images to webp."""
 
-    # bup_dir = Path(Path(conv_dir).parent).joinpath('img_bup')
-    bup_dir = Path(conv_dir).joinpath('img_bup')
+    src_f = None
+    file_count = {'fle_done': 0, 'fle_skip': 0, 'fle_total': 0}
+    ext_list = {'png', 'jpeg', 'jpg', 'gif', 'tiff', 'tif'}
 
-    dest_file = Path(bup_dir).joinpath(Path(src_file).relative_to(conv_dir))
-    dest_file_par = Path(dest_file).parent
+    def __init__(self, conv_dir, quali, ani_m=False, recode_webp=False, treat_orgs=None):
+        self.conv_dir = conv_dir
+        self.set_quali(quali, ani_m)
+        self.set_ext_list(recode_webp)
+        self.treat_orgs = treat_orgs
+        # TODO: Move bup_dir related code to own function
+        self.bup_dir = pt(self.conv_dir).joinpath('img_backup')
 
-    if not Path(dest_file_par).exists():
-        Path(dest_file_par).mkdir(exist_ok=True)
+    @classmethod
+    def set_ext_list(cls, recode_webp):
+        """Sets the state of the file extension list."""
+        if recode_webp:
+            cls.ext_list.add('webp')
 
-    shutil.move(src_file, dest_file)
+    def set_quali(self, quali, ani_m):
+        """Sets the quali state."""
+        self.quali = {'quality': 80}
+        self.quali_ani = {'allow_mixed': ani_m}
+        if quali is True:
+            self.quali = {'lossless': quali}
+        elif type(quali) is int:
+            self.quali = {'quality': quali}
 
+    def backup_originals(self, src_file):
+        """Clones the dir structure in a bup dir and moves given files there."""
+        dest_file = pt(self.bup_dir).joinpath(
+            pt(src_file).relative_to(self.conv_dir))
+        dest_file_par = pt(dest_file).parent
 
-def test_gifani(filename):
-    """Tests if a gif is animated."""
+        if not pt(dest_file_par).exists():
+            pt(dest_file_par).mkdir(parents=True, exist_ok=True)
 
-    return Image.open(filename).is_animated
+        shutil.move(src_file, dest_file)
 
-
-def get_mimetype(filename):
-    """Returns the mime type of a file."""
-
-    return magic.from_file(str(filename), mime=True).split('/')
-
-
-def dirwalker(conv_dir, recode_webp):
-    """Walks the given dir and returns a list of images to convert."""
-
-    file_count = [0, 0]
-    img_list = []
-    ext_list = ['png', 'jpeg', 'jpg', 'gif', 'tiff', 'tif']
-    if recode_webp is True:
-        ext_list.append('webp')
-
-    for path, dirs, files in os.walk(conv_dir):
-        if 'img_backup' in dirs:
-            dirs.remove('img_backup')
-
-        for fln in files:
-
-            # in_f = os.path.join(path, fln)
-            in_f = Path(path).joinpath(fln)
-            m_type, f_type = get_mimetype(in_f)
-
-            if m_type != 'image' or f_type not in ext_list:
-                file_count[1] += 1
-                continue
-
-            if f_type == 'gif' and test_gifani(in_f) is True:
-                # Skip animated gifs; convert is broken
-                # file_count[0] += 1
-                # img_list[1].append(in_f)
-                file_count[1] += 1
-                continue
-
-            else:
-                img_list.append(in_f)
-
-    return img_list, file_count
-
-
-def convert_img(conv_dir, recode_webp, quali, treat_orgs=None):
-    """Converts/recodes images to webp and handles orginal files."""
-
-    imgconv_list, file_count = dirwalker(conv_dir, recode_webp)
-
-    # if treat_orgs == 'backup':
-    #     out_dir = Path(conv_dir).joinpath('img_backup')
-    #
-    #     if not Path.exists(out_dir):
-    #         Path.mkdir(out_dir)
-    #     else:
-    #         raise OSError('Backup dir already exist.')
-
-    for in_f in imgconv_list:
-
-        out_f = Path(in_f).with_suffix('.webp')
+    def mp_worker(self, mp_conv_f):
+        """Convert method with multiprocessing capapility."""
+        mp_dst_f = pt(mp_conv_f).with_suffix('.webp')
 
         try:
-            Image.open(in_f).save(out_f, 'webp', lossless=quali[0], quality=quali[1], method=3)
-            file_count[0] += 1
-        except IOError:
-            print(f'"Could not convert:" {in_f}')
+            Image.open(mp_conv_f).save(
+                mp_dst_f, 'webp', **self.quali, **self.quali_ani, method=3)
+        except OSError:
+            print(f"Could not convert: {mp_conv_f}")
 
-        # Skip animated gifs; convert is broken
-        # (produces stills or unreadables jun'2019)
+        if self.treat_orgs == 'backup':
+            self.backup_originals(mp_conv_f)
 
-        # try:
-        #     Image.open(in_f).save(out_f, 'webp', save_all=True, lossless=loss, quality=quali, method=3)
-        #     file_count[0] += 1
-        # except IOError:
-        #     print(f'"cannot convert" {in_f}')
+        if self.treat_orgs == 'erase' and \
+                pt(mp_conv_f).suffix != 'webp':
+            pt(mp_conv_f).unlink()
 
-        if treat_orgs == 'backup':
-            backup_originals(in_f, conv_dir)
+    @staticmethod
+    def set_cpu_num():
+        """Sets the number of used CPUs."""
+        num_cpu = mp.cpu_count()
+        if num_cpu > 2:
+            return round(num_cpu * 0.75)
+        return 1
 
-            # shutil.move(in_f, PurePath(out_dir).joinpath(Path(in_f).relative_to(conv_dir)))
-            # shutil.move(in_f, os.path.join(out_dir, os.path.relpath(in_f, conv_dir)))
+    @classmethod
+    def test_gifani(cls):
+        """Tests if a gif is animated."""
+        return Image.open(cls.src_f).is_animated
 
-        if treat_orgs == 'erase' and in_f != out_f:
-            Path(in_f).unlink()
+    @classmethod
+    def get_mimetype(cls):
+        """Returns the mime type of a file."""
+        return magic.from_file(str(cls.src_f), mime=True).split('/')
 
-    print(f'\nCompleted. {file_count[0]!s} images where converted and {file_count[1]!s} files omitted.')
+    def dirwalker(self):
+        """Searches a dir for images, filters and provides them as a list."""
+        conv_img_list = []
+
+        for path, dirs, files in os.walk(self.conv_dir):
+            if 'img_backup' in dirs:
+                dirs.remove('img_backup')
+
+            for fln in files:
+                C2W.src_f = pt(path).joinpath(fln)
+                m_type, f_type = self.get_mimetype()
+
+                if m_type != 'image' or f_type not in C2W.ext_list:
+                    C2W.file_count['fle_skip'] += 1
+                    continue
+
+                if f_type == 'gif' and self.test_gifani() is True:
+                    # FIXME: converted anim. gifs are for some reason too slow playing
+                    # possible pillows fault
+                    dst_f = pt(C2W.src_f).with_suffix('.webp')
+                    try:
+                        Image.open(C2W.src_f).save(dst_f, 'webp', **self.quali, save_all=True, method=3)
+                    except OSError:
+                        print(f'"Could not convert: {C2W.src_f}')
+                    C2W.file_count['fle_done'] += 1
+
+                else:
+                    C2W.file_count['fle_done'] += 1
+                    conv_img_list.append(C2W.src_f)
+        return conv_img_list
+
+    def conv2webp(self):
+        """This manages all processing steps."""
+        if pt(self.bup_dir).exists():
+            raise FileExistsError("Backup dir already exist.")
+
+        conv_img_list = self.dirwalker()
+        item_count = len(conv_img_list)
+        print(f"{item_count} inanimated images to process.\n")
+
+        mp_count = self.set_cpu_num()
+        pool = mp.Pool(mp_count)
+        for _ in tqdm.tqdm(pool.imap_unordered(self.mp_worker, conv_img_list), total=item_count):
+            pass
+        pool.close()
+        pool.join()
+
+        print(f"\nCompleted.\n{C2W.file_count['fle_done']!s} images where converted and {C2W.file_count['fle_skip']!s} files omitted.")
 
 
 def parse_args():
-    """Gets the arguments."""
+    """
+    Argument parser and test for input path to provide functionality for the
+    command line interface. Also ensures that at least one of the required switches
+    is present.
+    """
     def check_dir_path(dir_path):
         """Check if given path exist and is a dir."""
         if not pt(dir_path).is_dir() or pt(dir_path).is_symlink():
@@ -154,6 +189,10 @@ def parse_args():
                         type=valid_nr,
                         dest='qua',
                         help='Set quality to lossy. Value 0-100')
+    aps.add_argument('-m',
+                     action='store_true',
+                     dest='ani_m',
+                     help='Set mixed quality mode for animated images.')
     org = aps.add_mutually_exclusive_group()
     org.add_argument('-e',
                      action='store_const',
@@ -176,21 +215,21 @@ def parse_args():
 
 
 def main(cfg):
-    """Main function with some checks for the convert process."""
-    convert_img(cfg.dir, cfg.r_webp, (cfg.loss, cfg.qua), cfg.treat_orgs)
+    """This executes all program steps, validity checks on the args and prints
+    infos messages if the default args are used.
+    """
     # TODO: add -mixed compression mode for animated images
     # TODO: look into adding raw Y'CbCr samples encoding
     if not cfg.qua:
         inf_line = f'Encoding stays at standard: lossy, with quality 80.'
     elif cfg.qua is True:
         inf_line = 'Encoding is set to lossless.'
-    elif isinstance(cfg.qua, int):
+    elif type(cfg.qua) is int:
         inf_line = f'Quality factor set to: {cfg.qua!s}'
 
     print(f"Converted animated gif\'s should be checked over. Output is mostly broken!\n"
           f"{inf_line} >> Processing starts.")
-
-    # print(str(timeit.default_timer() - start_t))
+    C2W(cfg.dir, cfg.qua, cfg.ani_m, cfg.r_webp, cfg.treat_orgs).conv2webp()
 
 
 if __name__ == '__main__':
