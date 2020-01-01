@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 """This app is a mass converter for the most common image formats to webp."""
-# Converting is resticted to the possible input formats png, jpeg, tiff,
-# gif for webp.
 
-# pylint: disable=c0301, w0511, c0123
-# c0123 type instead isinstance
-# w0511 codetags # too many arguments R0913 # to many branches R0914
+# If subprocess is used converting is resticted to the possible input formats
+# for the webp CLI tools (png, jpeg, tiff, gif, webp, raw Ycbcr)
+
+# pylint: disable=c0301, w0511, c0123, w1510
+
 
 import os
 import sys
@@ -32,6 +32,7 @@ __version__ = '0.10.0-alpha'
 class C2W:
     """The class for converting images to webp."""
 
+    name = 'Convert to Webp'
     src_f = None
     file_count = {'fle_done': 0, 'fle_skip': 0, 'fle_total': 0}
     ext_list = {'png', 'jpeg', 'jpg', 'gif', 'tiff', 'tif'}
@@ -59,16 +60,15 @@ class C2W:
         elif type(quali) is int:
             self.quali = {'quality': quali}
 
-    def backup_originals(self, src_file):
+    def backup_originals(self, src_f):
         """Clones the dir structure in a bup dir and moves given files there."""
-        dest_file = pt(self.bup_dir).joinpath(
-            pt(src_file).relative_to(self.conv_dir))
-        dest_file_par = pt(dest_file).parent
+        dst_f = pt(self.bup_dir).joinpath(pt(src_f).relative_to(self.conv_dir))
+        dst_f_par = pt(dst_f).parent
 
-        if not pt(dest_file_par).exists():
-            pt(dest_file_par).mkdir(parents=True, exist_ok=True)
+        if not pt(dst_f_par).exists():
+            pt(dst_f_par).mkdir(parents=True, exist_ok=True)
+        shutil.move(src_f, dst_f)
 
-        shutil.move(src_file, dest_file)
 
     def mp_worker(self, mp_conv_f):
         """Convert method with multiprocessing capapility."""
@@ -218,7 +218,6 @@ def main(cfg):
     """This executes all program steps, validity checks on the args and prints
     infos messages if the default args are used.
     """
-    # TODO: add -mixed compression mode for animated images
     # TODO: look into adding raw Y'CbCr samples encoding
     if not cfg.qua:
         inf_line = f'Encoding stays at standard: lossy, with quality 80.'
@@ -227,9 +226,8 @@ def main(cfg):
     elif type(cfg.qua) is int:
         inf_line = f'Quality factor set to: {cfg.qua!s}'
 
-    print(f"Converted animated gif\'s should be checked over. Output is mostly broken!\n"
-          f"{inf_line} >> Processing starts.")
     C2W(cfg.dir, cfg.qua, cfg.ani_m, cfg.r_webp, cfg.treat_orgs).conv2webp()
+    print(f"{inf_line} >> Processing starts.")
 
 
 if __name__ == '__main__':
