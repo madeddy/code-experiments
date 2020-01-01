@@ -16,8 +16,9 @@ from pathlib import Path as pt
 import multiprocessing as mp
 try:
     from PIL import Image
+    Image.warnings.simplefilter('ignore', Image.DecompressionBombWarning)
     import magic
-    import tqdm
+    from tqdm import tqdm
 except ImportError:
     raise f"The packages 'Pillow', 'python-magic' and 'tqdm' must be installed " \
            "to run this program."
@@ -26,7 +27,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.10.0-alpha'
+__version__ = '0.15.0-alpha'
 
 
 class C2W:
@@ -35,21 +36,14 @@ class C2W:
     name = 'Convert to Webp'
     src_f = None
     file_count = {'fle_done': 0, 'fle_skip': 0, 'fle_total': 0}
-    ext_list = {'png', 'jpeg', 'jpg', 'gif', 'tiff', 'tif'}
 
-    def __init__(self, conv_dir, quali, ani_m=False, recode_webp=False, treat_orgs=None):
+    def __init__(self, conv_dir, quali, ani_m=False, **kwargs):
         self.conv_dir = conv_dir
         self.set_quali(quali, ani_m)
-        self.set_ext_list(recode_webp)
-        self.treat_orgs = treat_orgs
-        # TODO: Move bup_dir related code to own function
+        self.rec_webp = kwargs.get('rec_webp')
+        self.conv_ani = kwargs.get('conv_ani')
+        self.treat_orgs = kwargs.get('treat_orgs')
         self.bup_dir = pt(self.conv_dir).joinpath('img_backup')
-
-    @classmethod
-    def set_ext_list(cls, recode_webp):
-        """Sets the state of the file extension list."""
-        if recode_webp:
-            cls.ext_list.add('webp')
 
     def set_quali(self, quali, ani_m):
         """Sets the quali state."""
@@ -80,17 +74,28 @@ class C2W:
         if self.treat_orgs == 'erase' and pt(src_f).suffix != 'webp':
             pt(src_f).unlink()
 
+    def ani_worker(self, conv_f):
         """Convert method with multiprocessing capapility."""
-        mp_dst_f = pt(mp_conv_f).with_suffix('.webp')
-
+        dst_f = pt(conv_f).with_suffix('.webp')
+        # NOTE: without duration arg set the converted anim. files play too slow
         try:
-            Image.open(mp_conv_f).save(
-                mp_dst_f, 'webp', **self.quali, **self.quali_ani, method=3)
+            with Image.open(conv_f) as ofi:
+                ofi.save(dst_f, 'webp', **self.quali_ani, duration=ofi.info['duration'], save_all=True, method=3)
         except OSError:
-            print(f"Could not convert: {mp_conv_f}")
+            print(f"Image {conv_f} could not be converted.")
 
         if self.treat_orgs:
             self.work_originals(conv_f)
+
+    def mp_worker(self, mp_conv_f):
+        """Convert method with multiprocessing capapility."""
+        dst_f = pt(mp_conv_f).with_suffix('.webp')
+        try:
+            with Image.open(mp_conv_f) as ofi:
+                ofi.save(dst_f, 'webp', **self.quali, method=3)
+        except OSError as err:
+            print(f"{err}\n"
+                  f"Could not convert: {mp_conv_f}")
 
         if self.treat_orgs:
             self.work_originals(mp_conv_f)
@@ -108,6 +113,16 @@ class C2W:
         """Tests if a gif is animated."""
         return Image.open(cls.src_f).is_animated
 
+    def skip_check(self, m_type, f_type):
+        """Different tests wich can cause to skip the file."""
+        if m_type != 'image':
+            return True
+        if f_type == 'webp' and self.rec_webp is False:
+            return True
+        if f_type == 'gif' and self.test_gifani() is True and self.conv_ani is False:
+            return True
+        return False
+
     @classmethod
     def get_mimetype(cls):
         """Returns the mime type of a file."""
@@ -115,7 +130,7 @@ class C2W:
 
     def dirwalker(self):
         """Searches a dir for images, filters and provides them as a list."""
-        conv_img_list = []
+        conv_img_list, conv_ani_list = [], []
 
         for path, dirs, files in os.walk(self.conv_dir):
             if 'img_backup' in dirs:
@@ -123,42 +138,56 @@ class C2W:
 
             for fln in files:
                 C2W.src_f = pt(path).joinpath(fln)
-                m_type, f_type = self.get_mimetype()
 
-                if m_type != 'image' or f_type not in C2W.ext_list:
+                m_type, f_type = self.get_mimetype()
+                if self.skip_check(m_type, f_type):
                     C2W.file_count['fle_skip'] += 1
                     continue
 
-                if f_type == 'gif' and self.test_gifani() is True:
-                    # FIXME: converted anim. gifs are for some reason too slow playing
-                    # possible pillows fault
-                    dst_f = pt(C2W.src_f).with_suffix('.webp')
-                    try:
-                        Image.open(C2W.src_f).save(dst_f, 'webp', **self.quali, save_all=True, method=3)
-                    except OSError:
-                        print(f'"Could not convert: {C2W.src_f}')
-                    C2W.file_count['fle_done'] += 1
+                try:
+                    # just making early sure pillow can work it
+                    Image.open(C2W.src_f)
 
-                else:
-                    C2W.file_count['fle_done'] += 1
-                    conv_img_list.append(C2W.src_f)
-        return conv_img_list
+                    if f_type == 'gif' and self.test_gifani() is True:
+                        conv_ani_list.append(C2W.src_f)
+                        # counter placed in worker func doesn't work
+                        C2W.file_count['fle_done'] += 1
+                    else:
+                        conv_img_list.append(C2W.src_f)
+                        C2W.file_count['fle_done'] += 1
+
+                except OSError as err:
+                    print(f"{err}\nFormat is not supported by Pillow. Skipped.")
+                except Image.DecompressionBombError as err:
+                    print(f"{err}\n")
+                    que = f"You can proceed with typing <yes> or skip the file \
+                    with <no>. Thats a serious risk, so be sure!"
+                    ans = str(input(que)).lower()
+                    if ans == "yes":
+                        print(f"Proceeding with file {C2W.src_f}.")
+                    elif ans == "no":
+                        continue
+
+        return conv_img_list, conv_ani_list
 
     def conv2webp(self):
         """This manages all processing steps."""
         if pt(self.bup_dir).exists():
             raise FileExistsError("Backup dir already exist.")
 
-        conv_img_list = self.dirwalker()
-        item_count = len(conv_img_list)
-        print(f"{item_count} inanimated images to process.\n")
+        conv_img_list, conv_ani_list = self.dirwalker()
+        item_count = len(conv_img_list), len(conv_ani_list)
+        print(f"{item_count[0]} standard and {item_count[1]} animated images to process.\n")
 
         mp_count = self.set_cpu_num()
-        pool = mp.Pool(mp_count)
-        for _ in tqdm.tqdm(pool.imap_unordered(self.mp_worker, conv_img_list), total=item_count):
-            pass
-        pool.close()
-        pool.join()
+        with mp.Pool(mp_count) as pool:
+            for _ in tqdm(pool.imap_unordered(self.mp_worker, conv_img_list), total=item_count[0], unit='files'):
+                pass
+            print()
+            for _ in tqdm(pool.imap_unordered(self.ani_worker, conv_ani_list), total=item_count[1], unit='files'):
+                pass
+            pool.close()
+            pool.join()
 
         print(f"\nCompleted.\n{C2W.file_count['fle_done']!s} images where converted and {C2W.file_count['fle_skip']!s} files omitted.")
 
@@ -204,18 +233,22 @@ def parse_args():
     org = aps.add_mutually_exclusive_group()
     org.add_argument('-e',
                      action='store_const',
-                     dest='treat_orgs',
+                     dest='orgs',
                      const='erase',
                      help='Erase orginal files.')
     org.add_argument('-b',
                      action='store_const',
-                     dest='treat_orgs',
+                     dest='orgs',
                      const='backup',
                      help='Backup orginal files.')
-    aps.add_argument('-w',
+    aps.add_argument('-webp',
                      action='store_true',
                      dest='r_webp',
                      help='Re-/Encode also webp images. e.g lossless to lossy')
+    aps.add_argument('-ani',
+                     action='store_true',
+                     dest='c_ani',
+                     help='Convert animated gif images to webp.')
     aps.add_argument('--version',
                      action='version',
                      version=f'%(prog)s : { __title__} {__version__}')
@@ -234,8 +267,9 @@ def main(cfg):
     elif type(cfg.qua) is int:
         inf_line = f'Quality factor set to: {cfg.qua!s}'
 
-    C2W(cfg.dir, cfg.qua, cfg.ani_m, cfg.r_webp, cfg.treat_orgs).conv2webp()
     print(f"{inf_line} >> Processing starts.")
+    c2w = C2W(cfg.dir, cfg.qua, cfg.ani_m, rec_webp=cfg.r_webp, conv_ani=cfg.c_ani, treat_orgs=cfg.orgs)
+    c2w.conv2webp()
 
 
 if __name__ == '__main__':
