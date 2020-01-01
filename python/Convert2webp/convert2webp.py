@@ -54,11 +54,14 @@ class C2W:
     def set_quali(self, quali, ani_m):
         """Sets the quali state."""
         self.quali = {'quality': 80}
-        self.quali_ani = {'allow_mixed': ani_m}
         if quali is True:
             self.quali = {'lossless': quali}
         elif type(quali) is int:
             self.quali = {'quality': quali}
+
+        self.quali_ani = self.quali
+        if ani_m is True:
+            self.quali_ani = {'allow_mixed': ani_m}
 
     def backup_originals(self, src_f):
         """Clones the dir structure in a bup dir and moves given files there."""
@@ -69,8 +72,14 @@ class C2W:
             pt(dst_f_par).mkdir(parents=True, exist_ok=True)
         shutil.move(src_f, dst_f)
 
+    def work_originals(self, src_f):
+        """Handles the orginal files if option is given."""
+        if self.treat_orgs == 'backup':
+            self.backup_originals(src_f)
 
-    def mp_worker(self, mp_conv_f):
+        if self.treat_orgs == 'erase' and pt(src_f).suffix != 'webp':
+            pt(src_f).unlink()
+
         """Convert method with multiprocessing capapility."""
         mp_dst_f = pt(mp_conv_f).with_suffix('.webp')
 
@@ -80,12 +89,11 @@ class C2W:
         except OSError:
             print(f"Could not convert: {mp_conv_f}")
 
-        if self.treat_orgs == 'backup':
-            self.backup_originals(mp_conv_f)
+        if self.treat_orgs:
+            self.work_originals(conv_f)
 
-        if self.treat_orgs == 'erase' and \
-                pt(mp_conv_f).suffix != 'webp':
-            pt(mp_conv_f).unlink()
+        if self.treat_orgs:
+            self.work_originals(mp_conv_f)
 
     @staticmethod
     def set_cpu_num():
