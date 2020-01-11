@@ -23,7 +23,7 @@ __title__ = 'RenPy Ressource Lister'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.14.0-alpha'
+__version__ = '0.15.0-alpha'
 
 # INFOS:
 # python 3.6+ required
@@ -45,8 +45,11 @@ __version__ = '0.14.0-alpha'
 
 class RRL:
     """The class for all ressource defining related functionality."""
+    name = 'RenPy Ressource Lister'
     verbosity = 1
     tmp_lst = []
+    supp_ext = ['webp', 'png', 'jpeg', 'jpg', 'opus', 'ogg', 'mp3', 'wav',
+                'webm', 'mkv', 'ogv', 'avi', 'mpeg', 'mpeg2', 'mpeg4', 'mp4']
 
     def __init__(self, inp, outfile, verbose=None):
         self.inpdir = inp[0]
@@ -56,18 +59,13 @@ class RRL:
             print('Wrong type given.', error)
         self.typus = inp[1].lower()
         self.outfile = outfile
-        RRL.verbosity = verbose
-
-        self.valid_path()
-        self.valid_outfile()
-        self.check_defaults()
-        # needs before open or hits old file (if exist)
-        self.test_register_file()
-        # self.open_of = open(outfile, 'w')
+        if verbose:
+            RRL.verbosity = verbose
 
     @classmethod
     def inf(cls, inf_level, message, warn=False):
         """Outputs the infos allowed for the current verbosity level."""
+
         if cls.verbosity >= inf_level:
             mes_sort = 'INFO'
             if warn:
@@ -81,6 +79,7 @@ class RRL:
 
     def valid_outfile(self):
         """This tests if the given output filename is acceptable."""
+
         if pt(self.outfile).suffix != '.rpy':
             raise ValueError("Output filename must have rpy extension.")
 
@@ -90,6 +89,7 @@ class RRL:
 
     def check_defaults(self):
         """Checks if default values are used and informs if verbosity=2."""
+
         if self.outfile == 'ressource_def.rpy':
             self.inf(2, f">> Output filename set to default: <{self.outfile}>.")
         # FIXME: Used like this the dirs can be mixed up with the type
@@ -100,9 +100,10 @@ class RRL:
         """Tests if the given output filename already exists and makes
         a backup.
         """
+
         if pt(self.outfile).is_file():
-            timestamp = strftime('%d%b%Y_%H:%M:%S', localtime())
-            pt(self.outfile).rename(pt(self.outfile).with_suffix('.' + timestamp + '.bup'))
+            timest_suff = f".{strftime('%d%b%Y_%H:%M:%S', localtime())}.bup"
+            pt(self.outfile).rename(pt(self.outfile).with_suffix(timest_suff))
 
             self.inf(1, f">> Target file {self.outfile} already exists. Performed " \
                      "backup. Original file has now extension <bup>.")
@@ -110,6 +111,7 @@ class RRL:
 
     def write_register_list(self):
         """Writes a intro and the content of the register list to the file."""
+
         header_text = ("""\
         # REN'PY ASSET LIST
         # Below are the project assets with the renpy <asset_type>
@@ -126,37 +128,35 @@ class RRL:
         # print(*self.tmp_lst, sep='\n')
         self.inf(2, f">> List was written to file {self.outfile!r} in directory\n{pt.cwd()}")
 
+    @staticmethod
+    def get_mimetype(inp):
+        """Returns the mime type of a file."""
+        return magic.from_file(str(inp), mime=True).split('/')
+
     def format_test(self, testobj):
         """
         This determines if the input file is a known format of the given media
         type. Negatives are skipped, positives again checked if their extension
         is supported or not. Returns this status.
         """
-        supp_state = None
+
         if pt(testobj).is_file():
-            m_type, f_type = magic.from_file(
-                str(testobj), mime=True).split('/')
+            m_type, f_type = self.get_mimetype(testobj)
 
             # print('get mime_type', m_type)
             if self.typus not in m_type:
-                return supp_state
-
+                return None
             if '-' in f_type:
                 f_type = f_type.split('-')[1]
             # print('guess extension', f_type)
-
-            supp_ext = ['webp', 'png', 'jpeg', 'jpg', 'opus', 'ogg', 'mp3', 'wav', 'webm', 'mkv', 'ogv', 'avi', 'mpeg', 'mpeg2', 'mpeg4', 'mp4']
-            if f_type in supp_ext:
-                supp_state = 'supported'
-            else:
-                supp_state = 'unsupported'
-        return supp_state
+            return bool(f_type in RRL.supp_ext)
 
     def typus_statement(self, cur_dir, rel_path, fn_base):
         """
         This supports the dir lister by constructing the define statements for
         the actual asset typus.
         """
+
         alias_sep = '_'
         if self.typus == 'image':
             dcl_base = 'image '
@@ -176,6 +176,7 @@ class RRL:
 
     def dir_lister(self):
         """This finds, filters and lists all elements in the given path."""
+
         self.tmp_lst.append(f"\n\n# {self.typus.title()} section {'#' * 64}\n")
 
         unsup_count = 0
@@ -187,17 +188,18 @@ class RRL:
 
             files = humansorted(files)
             cur_dir = pt(path).name
+
             for fn in files:
                 fullpath = pt(path).joinpath(fn)
                 format_status = self.format_test(fullpath)
 
-                if format_status == 'supported':
+                if format_status is True:
                     fn_base = pt(fn).stem.lower()
                     rel_path = pt(fullpath).relative_to(self.inpdir)
                     self.tmp_lst.append(
                         self.typus_statement(cur_dir, rel_path, fn_base))
 
-                elif format_status == 'unsupported':
+                elif format_status is False:
                     unsup_count += 1
                 else:
                     continue
@@ -205,6 +207,16 @@ class RRL:
         if unsup_count > 0:
             self.inf(1, f"The directory contains {unsup_count!s} {self.typus} file(s) of non-supported type.")
 
+
+    def rrl_control(self):
+        """Central method to execute all steps."""
+        self.valid_path()
+        self.valid_outfile()
+        self.check_defaults()
+        # needs before open or hits old file (if exist)
+        self.test_register_file()
+        # self.open_of = open(outfile, 'w')
+        self.dir_lister()
         self.write_register_list()
 
 
@@ -214,6 +226,7 @@ def parse_args():
     command line interface. Also ensures that at least one of the required switches
     is present.
     """
+
     def check_dir_path(dir_path):
         """Helper function to make sure given path is a dir."""
         if not pt(dir_path).is_dir() or pt(dir_path).is_symlink():
@@ -294,7 +307,7 @@ def rrl_main(cfg):
     elif cfg.def_vid:
         med_arg = cfg.def_vid, 'video'
     rrl = RRL(med_arg, cfg.outfile, cfg.verbose)
-    rrl.dir_lister()
+    rrl.rrl_control()
 
     print("\n>> Completed!\n")
 
