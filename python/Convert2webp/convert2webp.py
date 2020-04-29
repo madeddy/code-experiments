@@ -14,6 +14,7 @@ import argparse
 import shutil
 from pathlib import Path as pt
 import multiprocessing as mp
+import textwrap
 try:
     from PIL import Image
     Image.warnings.simplefilter('ignore', Image.DecompressionBombWarning)
@@ -28,15 +29,14 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.17.0-alpha'
+__version__ = '0.23.0-alpha'
 
 
-class C2W:
-    """The class for converting images to webp."""
+class C2wCommon:
+    """Provides some shared methods and variables for the main class."""
 
     name = 'Convert to Webp'
-    src_f = None
-    ani_ext = ['webp', 'gif']
+    verbosity = 1
     file_count = {
         'stl_f_found': 0,
         'ani_f_found': 0,
@@ -46,26 +46,169 @@ class C2W:
     mp_stl_count = mp.Value('i', 0)
     mp_ani_count = mp.Value('i', 0)
 
-    def __init__(self, conv_dir, quali, ani_m=False, **kwargs):
-        self.conv_dir = conv_dir
-        self.set_quali(quali, ani_m)
+    quali = {'quality': 80}
+    quali_ani = quali
+    ani_ext = ['webp', 'gif']
+
+    def __str__(self):
+        return f"{self.__class__.__name__}({self.name!r})"
+
+    @classmethod
+    def inf(cls, inf_level, msg, m_sort=None):
+        """Outputs by the current verboseness level allowed infos."""
+        if cls.verbosity >= inf_level:  # TODO: use self.tty ?
+            ind1 = f"{cls.name}:\x1b[32m >> \x1b[0m"
+            ind2 = " " * 12
+            if m_sort == 'note':
+                ind1 = f"{cls.name}:\x1b[93m NOTE \x1b[0m> "
+                ind2 = " " * 16
+            elif m_sort == 'warn':
+                ind1 = f"{cls.name}:\x1b[31m WARNING \x1b[0m> "
+                ind2 = " " * 20
+            elif m_sort == 'raw':
+                print(ind1, msg)
+                return
+            print(textwrap.fill(msg, width=90, initial_indent=ind1, subsequent_indent=ind2))
+
+    @classmethod
+    def make_dirstruct(cls, dst):
+        """Constructs any needet output directorys if they not already exist."""
+        if not dst.exists():
+            cls.inf(2, f"Creating directory structure for: {dst}")
+            dst.mkdir(parents=True, exist_ok=True)
+
+
+class C2wPathWork(C2wCommon):
+    """Support class which checks input and prepairs the image filelist."""
+
+    def __init__(self):
+        super().__init__()
+        self.bup_pth = None
+        self.inpath = None
+        self.src_file = None
+        self.rec_webp = None
+        self.conv_ani = None
+
+    def check_inpath(self):
+        """Helper to check if given input path exist."""
+        if not self.inpath.is_dir() or self.inpath.is_symlink():
+            raise NotADirectoryError(f"Could the input path object >{self.inpath}<" \
+                                    "not find! Assert given path.")
+        self.inpath = self.inpath.resolve(strict=True)
+
+    def check_bup(self):
+        """Helper to check if the backup directory already exists."""
+        self.bup_pth = self.inpath.joinpath('c2w_img_backup')
+        if self.bup_pth.is_dir() and any(self.bup_pth.iterdir()):
+            raise FileExistsError("Backup dir already exists and has content. Stoping.")
+
+    def test_ani(self, f_type):
+        """Tests if a gif is animated."""
+        return f_type in self.ani_ext and Image.open(self.src_file).is_animated
+
+    def skip_check(self, m_type, f_type):
+        """Different tests wich can cause to skip the file."""
+        if m_type != 'image':
+            return True
+        if f_type == 'webp' and self.rec_webp is False:
+            return True
+        return False
+
+    def get_mimetype(self):
+        """Returns the mime type of a file."""
+        return magic.from_file(str(self.src_file), mime=True).split('/')
+
+    def dirwalker(self):
+        """Searches a dir for images, filters and provides them as a list."""
+
+        img_list = list()
+        for path, dirs, files in os.walk(self.inpath):
+            if 'img_backup' in dirs:
+                dirs.remove('img_backup')
+
+            for fln in files:
+                img_state = None
+                self.src_file = pt(path).joinpath(fln)
+
+                m_type, f_type = self.get_mimetype()
+                if self.skip_check(m_type, f_type):
+                    C2W.file_count['fle_skip'] += 1
+                    continue
+
+                try:
+                    # make at early sure pillow can work it
+                    Image.open(self.src_file)
+
+                    if self.test_ani(f_type) is False:
+                        C2W.file_count['stl_f_found'] += 1
+                        img_state = "stl"
+                    else:
+                        if self.conv_ani is True:
+                            # placing counter in worker funcs doesn't work
+                            C2W.file_count['ani_f_found'] += 1
+                            img_state = "ani"
+                        else:
+                            C2W.file_count['fle_skip'] += 1
+                            continue
+
+                    img_list.append((self.src_file, img_state))
+
+                except OSError as err:
+                    self.inf(1, f"{err}\nFormat is not supported by Pillow. Skipped.")
+                    C2W.file_count['fle_skip'] += 1
+                    continue
+
+                except Image.DecompressionBombError as err:
+                    self.inf(0, f"{err}\n")
+                    que = f"To proceed type <yes> or skip the file with <no>. \
+                    Thats a serious risk, so be sure!"
+                    ans = str(input(que)).lower()
+                    if ans == "yes":
+                        self.inf(0, f"Proceeding with file {self.src_file}.")
+                    elif ans == "no":
+                        self.inf(0, f"Skipping very big file {self.src_file}.")
+                        C2W.file_count['fle_skip'] += 1
+                        continue
+
+        return img_list
+
+
+class C2W(C2wPathWork):
+    """Main class with all functionality for converting images to webp."""
+
+    def __init__(self, inp, quali, ani_mix=False, verbose=None, **kwargs):
+        if verbose:
+            C2wCommon.verbosity = verbose
+        super().__init__()
+        self.inpath = pt(inp)
+        self.set_quali(quali, ani_mix)
         self.rec_webp = kwargs.get('rec_webp')
         self.conv_ani = kwargs.get('conv_ani')
         self.treat_orgs = kwargs.get('treat_orgs')
-        self.bup_dir = pt(self.conv_dir).joinpath('img_backup')
 
-    def set_quali(self, quali, ani_m):
+    # TODO: Quali setting in init... overhaul it
+    def set_quali(self, quali, ani_mix):
         """Sets the quali state."""
-
-        self.quali = {'quality': 80}
         if quali is True:
             self.quali = {'lossless': quali}
         elif type(quali) is int:
+            if not 0 <= quali <= 100:
+                raise ValueError("Invalid number input for quality argument.")
             self.quali = {'quality': quali}
 
         self.quali_ani = self.quali
-        if ani_m is True:
-            self.quali_ani = {'allow_mixed': ani_m}
+        if ani_mix:
+            self.quali_ani = {'allow_mixed': True}
+
+
+    def begin_msg(self):
+        """Outputs a info about the start state if verbosity is high."""
+        if self.quali['quality'] == 80:
+            self.inf(2, f"Encoding stays at standard: lossy, with quality 80.")
+        elif 'lossless' in self.quali.keys():
+            self.inf(2, "Encoding is set to lossless.")
+        elif type(self.quali['quality']) is int:
+            self.inf(1, f"Quality factor is set to: {self.quali['quality']!s}")
 
     @classmethod
     def trans_count(cls):
@@ -75,17 +218,15 @@ class C2W:
 
     def orgs_bup(self, src_f):
         """Clones the dir structure in a bup dir and moves given files there."""
+        dst_f = self.bup_pth.joinpath(src_f.relative_to(self.inpath))
+        dst_f_par = dst_f.parent
 
-        dst_f = pt(self.bup_dir).joinpath(pt(src_f).relative_to(self.conv_dir))
-        dst_f_par = pt(dst_f).parent
-
-        if not pt(dst_f_par).exists():
-            pt(dst_f_par).mkdir(parents=True, exist_ok=True)
-        shutil.move(src_f, dst_f)
+        if not dst_f_par.exists():
+            dst_f_par.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src_f), dst_f)
 
     def orgs_switch(self, src_f):
         """Handles the orginal files if option is given."""
-
         if self.treat_orgs == 'backup':
             self.orgs_bup(src_f)
         elif self.treat_orgs == 'erase' and pt(src_f).suffix != 'webp':
@@ -93,7 +234,6 @@ class C2W:
 
     def mp_worker(self, inp):
         """Convert method for still images with multiprocessing capapility."""
-
         mp_conv_f, img_state = inp
         dst_f = pt(mp_conv_f).with_suffix('.webp')
 
@@ -112,7 +252,7 @@ class C2W:
                     C2W.mp_ani_count.value += 1
 
         except OSError:
-            print(f"Image {mp_conv_f} could not be converted.")
+            self.inf(1, f"Image {mp_conv_f} could not be converted.")
 
         if self.treat_orgs:
             self.orgs_switch(mp_conv_f)
@@ -125,84 +265,11 @@ class C2W:
             return round(num_cpu * 0.75)
         return 1
 
-    @classmethod
-    def test_ani(cls, f_type):
-        """Tests if a gif is animated."""
-        return f_type in cls.ani_ext and Image.open(cls.src_f).is_animated
-
-    def skip_check(self, m_type, f_type):
-        """Different tests wich can cause to skip the file."""
-
-        if m_type != 'image':
-            return True
-        if f_type == 'webp' and self.rec_webp is False:
-            return True
-        return False
-
-    @classmethod
-    def get_mimetype(cls):
-        """Returns the mime type of a file."""
-        return magic.from_file(str(cls.src_f), mime=True).split('/')
-
-    def dirwalker(self):
-        """Searches a dir for images, filters and provides them as a list."""
-
-        img_list = list()
-        for path, dirs, files in os.walk(self.conv_dir):
-            if 'img_backup' in dirs:
-                dirs.remove('img_backup')
-
-            for fln in files:
-                img_state = None
-                C2W.src_f = pt(path).joinpath(fln)
-
-                m_type, f_type = self.get_mimetype()
-                if self.skip_check(m_type, f_type):
-                    C2W.file_count['fle_skip'] += 1
-                    continue
-
-                try:
-                    # just making early sure pillow can work it
-                    Image.open(C2W.src_f)
-
-                    if self.test_ani(f_type) is False:
-                        C2W.file_count['stl_f_found'] += 1
-                        img_state = "stl"
-                    else:
-                        if self.conv_ani is True:
-                            # placing counter in worker funcs doesn't work
-                            C2W.file_count['ani_f_found'] += 1
-                            img_state = "ani"
-                        else:
-                            C2W.file_count['fle_skip'] += 1
-                            continue
-
-                    img_list.append((C2W.src_f, img_state))
-
-                except OSError as err:
-                    print(f"{err}\nFormat is not supported by Pillow. Skipped.")
-                    C2W.file_count['fle_skip'] += 1
-                    continue
-
-                except Image.DecompressionBombError as err:
-                    print(f"{err}\n")
-                    que = f"To proceed type <yes> or skip the file with <no>. \
-                    Thats a serious risk, so be sure!"
-                    ans = str(input(que)).lower()
-                    if ans == "yes":
-                        print(f"Proceeding with file {C2W.src_f}.")
-                    elif ans == "no":
-                        print(f"Skipping very big file {C2W.src_f}.")
-                        C2W.file_count['fle_skip'] += 1
-                        continue
-
-        return img_list
-
-    def conv2webp(self):
+    def c2w_control(self):
         """This manages all processing steps."""
-
-        if pt(self.bup_dir).exists():
-            raise FileExistsError("Backup dir already exists. Stoping.")
+        self.begin_msg()
+        self.check_inpath()
+        self.check_bup()
 
         img_list = self.dirwalker()
         item_count = C2W.file_count['stl_f_found'] + C2W.file_count['ani_f_found']
@@ -215,7 +282,7 @@ class C2W:
             pool.join()
 
         self.trans_count()
-        print(f"\nCompleted.\n{C2W.file_count['stl_f_done']!s} still images where converted and {C2W.file_count['fle_skip']!s} files omitted.")
+        self.inf(1, f"\nCompleted.\n{C2W.file_count['stl_f_done']!s} still images where converted and {C2W.file_count['fle_skip']!s} files omitted.")
 
 
 def parse_args():
@@ -224,13 +291,6 @@ def parse_args():
     command line interface. Also ensures that at least one of the required switches
     is present.
     """
-
-    def check_dir_path(dir_path):
-        """Check if given path exist and is a dir."""
-        if not pt(dir_path).is_dir() or pt(dir_path).is_symlink():
-            raise NotADirectoryError(dir_path)
-        return dir_path
-
     def valid_nr(inp):
         """Validates the users input of a number."""
         input_nr = int(inp)
@@ -240,9 +300,11 @@ def parse_args():
 
     aps = argparse.ArgumentParser(
         description='A program for converting tiff, png, jpeg, gif images to webp or encode webp anew.\nEXAMPLE USAGE: convert_to_webp.py -q 90',
-        epilog='The switches are optional. Without one of them the default quality is lossy -q 80 and the orginal files will be keeped.')
-    aps.add_argument('-dir',
-                     type=check_dir_path,
+        epilog='The switches are optional. Without one of them the default quality is lossy -q 80 and the orginal files will be retained.')
+    aps.add_argument('inp',
+                     metavar='Target directory',
+                     action='store',
+                     type=str,
                      help='Directory path with images for processing.')
     switch = aps.add_mutually_exclusive_group()
     switch.add_argument('-l',
@@ -276,6 +338,11 @@ def parse_args():
                      action='store_true',
                      dest='c_ani',
                      help='Convert animated gif images to webp.')
+    aps.add_argument('--verbose',
+                     metavar='level [0-2]',
+                     type=int,
+                     choices=range(0, 3),
+                     help='Amount of info output. 0:none, 2:much, default:1')
     aps.add_argument('--version',
                      action='version',
                      version=f'%(prog)s : { __title__} {__version__}')
@@ -286,15 +353,6 @@ def main(cfg):
     """This executes all program steps, validity checks on the args and prints
     infos messages if the default args are used.
     """
-
-    if not cfg.qua:
-        inf_line = f'Encoding stays at standard: lossy, with quality 80.'
-    elif cfg.qua is True:
-        inf_line = 'Encoding is set to lossless.'
-    elif type(cfg.qua) is int:
-        inf_line = f'Quality factor set to: {cfg.qua!s}'
-
-    print(f"{inf_line} >> Processing starts.\n")
     c2w = C2W(cfg.dir, cfg.qua, cfg.ani_m, rec_webp=cfg.r_webp, conv_ani=cfg.c_ani, treat_orgs=cfg.orgs)
     c2w.conv2webp()
 
