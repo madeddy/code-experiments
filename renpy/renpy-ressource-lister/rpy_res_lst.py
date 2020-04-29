@@ -6,9 +6,31 @@ A small program for listing defined Ren'Py ressourses.
 It is intended to be executed in the Ren'pys game directory below the asset
 dirs (images, audio).
 The subdirectories will be searched and the content written to a file.
+
+INFOS:
+python 3.6+ required
+python package dependencys: natsort, python-magic
+
+Works with my Linux distro. Untested in other OS; however it should with few
+changes.
+For working format recognition in win/mac look at the installation notes at
+https://github.com/ahupp/python-magic
+
+This builds on the work and knowledge of many people all over the
+world. Thanks!
+
+Try to organize your directories cleanly to make it as usable as possible
+for the script!
 """
 
 # pylint: disable=w0511, C0103, C0301
+# TODO:
+    # Move outfile default from argparse to class
+    # move check_dir_path from argparse to class
+    # rework init assert test to normal test method
+    # test if pathlike changes all correct working (no missing pt(...))
+
+
 
 import os
 import sys
@@ -23,24 +45,8 @@ __title__ = 'RenPy Ressource Lister'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.15.0-alpha'
+__version__ = '0.16.0-alpha'
 
-# INFOS:
-# python 3.6+ required
-# python packages needet: natsort, python-magic
-#
-# Works with my Linux distro. Untested in other OS; however it should with few
-# changes.
-# For working format recognition in win/mac look at the installation notes at
-# https://github.com/ahupp/python-magic
-#
-# This builds on the work and knowledge of many people all over the
-# world. Thanks!
-#
-# Try to organize your directories cleanly to make it as usable as possible
-# for the script!
-
-# # # # # # # # # # # # # # # # # # # #
 
 
 class RRL:
@@ -52,13 +58,13 @@ class RRL:
                 'webm', 'mkv', 'ogv', 'avi', 'mpeg', 'mpeg2', 'mpeg4', 'mp4']
 
     def __init__(self, inp, outfile, verbose=None):
-        self.inpdir = inp[0]
+        self.inpdir = pt(inp[0])
         try:
             assert inp[1] in ['image', 'audio', 'video']
         except AssertionError as error:
             print('Wrong type given.', error)
         self.typus = inp[1].lower()
-        self.outfile = outfile
+        self.outfile = pt(outfile)
         if verbose:
             RRL.verbosity = verbose
 
@@ -74,17 +80,17 @@ class RRL:
 
     def valid_path(self):
         """This tests if the given directory exists."""
-        if not pt(self.inpdir).is_dir():
+        if not self.inpdir.is_dir():
             raise OSError(f"Directory {self.inpdir!r} does not exist.")
 
     def valid_outfile(self):
         """This tests if the given output filename is acceptable."""
 
-        if pt(self.outfile).suffix != '.rpy':
+        if self.outfile.suffix != '.rpy':
             raise ValueError("Output filename must have rpy extension.")
 
         for char in [':', ' ']:
-            if char in self.outfile:
+            if char in str(self.outfile):
                 raise OSError(f"\"{self.outfile}\" contains unallowed charakter.")
 
     def check_defaults(self):
@@ -93,7 +99,7 @@ class RRL:
         if self.outfile == 'ressource_def.rpy':
             self.inf(2, f">> Output filename set to default: <{self.outfile}>.")
         # FIXME: Used like this the dirs can be mixed up with the type
-        if self.inpdir == 'images' or self.inpdir == 'audio' or self.inpdir == 'video':
+        if self.inpdir.name in ['images', 'audio', 'video']:
             self.inf(2, f"{self.typus.title()} directory set to default: <{self.inpdir}>.")
 
     def test_register_file(self):
@@ -101,9 +107,9 @@ class RRL:
         a backup.
         """
 
-        if pt(self.outfile).is_file():
+        if self.outfile.is_file():
             timest_suff = f".{strftime('%d%b%Y_%H:%M:%S', localtime())}.bup"
-            pt(self.outfile).rename(pt(self.outfile).with_suffix(timest_suff))
+            self.outfile.rename(self.outfile.with_suffix(timest_suff))
 
             self.inf(1, f">> Target file {self.outfile} already exists. Performed " \
                      "backup. Original file has now extension <bup>.")
@@ -121,7 +127,7 @@ class RRL:
 
         # print(textwrap.dedent(header_text), file=self.open_of)
         # print(*self.tmp_lst, sep='\n', file=self.open_of)
-        with open(self.outfile, 'w') as ofi:
+        with self.outfile.open('w') as ofi:
             print(textwrap.dedent(header_text), file=ofi)
             print(*self.tmp_lst, sep='\n', file=ofi)
 
@@ -133,14 +139,14 @@ class RRL:
         """Returns the mime type of a file."""
         return magic.from_file(str(inp), mime=True).split('/')
 
-    def format_test(self, testobj):
+    def format_test(self, testobj): # pylint: disable=r1710
         """
         This determines if the input file is a known format of the given media
         type. Negatives are skipped, positives again checked if their extension
         is supported or not. Returns this status.
         """
 
-        if pt(testobj).is_file():
+        if testobj.is_file():
             m_type, f_type = self.get_mimetype(testobj)
 
             # print('get mime_type', m_type)
@@ -163,7 +169,7 @@ class RRL:
         elif self.typus == 'audio':
             dcl_base = 'define audio.'
 
-        if cur_dir not in self.inpdir:
+        if cur_dir not in self.inpdir.name:
             dcl_left = dcl_base + cur_dir + alias_sep + fn_base
         else:
             dcl_left = dcl_base + fn_base
@@ -190,12 +196,12 @@ class RRL:
             cur_dir = pt(path).name
 
             for fn in files:
-                fullpath = pt(path).joinpath(fn)
+                fullpath = path.joinpath(fn)
                 format_status = self.format_test(fullpath)
 
                 if format_status is True:
-                    fn_base = pt(fn).stem.lower()
-                    rel_path = pt(fullpath).relative_to(self.inpdir)
+                    fn_base = fn.stem.lower()
+                    rel_path = fullpath.relative_to(self.inpdir)
                     self.tmp_lst.append(
                         self.typus_statement(cur_dir, rel_path, fn_base))
 
@@ -289,6 +295,9 @@ def rrl_main(cfg):
     """This executes all program steps, validity checks on the args and prints
     infos messages if the default args are used.
     """
+    if not sys.version_info[:2] >= (3, 6):
+        raise Exception("Must be executed in Python 3.6 or later.\n"
+                        f"You are running {sys.version}")
 
     print("configs", cfg.def_img, cfg.def_aud, cfg.def_vid)
     # if cfg.def_img:
@@ -313,6 +322,4 @@ def rrl_main(cfg):
 
 
 if __name__ == '__main__':
-    assert sys.version_info >= (3, 6), \
-        f"Must be executed in Python 3.6 or later. You are running {sys.version}"
     rrl_main(parse_args())
