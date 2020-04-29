@@ -350,14 +350,16 @@ def parse_args():
 
 
 def main(cfg):
-    """This executes all program steps, validity checks on the args and prints
-    infos messages if the default args are used.
+    """This checks if the required Python version runs, instantiates the class,
+    delivers the parameters to its init and executes the program from CLI.
     """
-    c2w = C2W(cfg.dir, cfg.qua, cfg.ani_m, rec_webp=cfg.r_webp, conv_ani=cfg.c_ani, treat_orgs=cfg.orgs)
-    c2w.conv2webp()
+    if not sys.version_info[:2] >= (3, 6):
+        raise Exception("Must be executed in Python 3.6 or later.\n"
+                        f"You are running {sys.version}")
+    c2w = C2W(cfg.inp, cfg.qua, cfg.ani_m, cfg.verbose,
+              rec_webp=cfg.r_webp, conv_ani=cfg.c_ani, treat_orgs=cfg.orgs)
+    c2w.c2w_control()
 
 
 if __name__ == '__main__':
-    assert sys.version_info >= (3, 6), \
-        f"Must be run in Python 3.6 or later. You are running {sys.version}"
     main(parse_args())
