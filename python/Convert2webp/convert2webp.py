@@ -29,7 +29,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.24.0-alpha'
+__version__ = '0.24.1-alpha'
 
 
 class C2wCommon:
@@ -86,7 +86,7 @@ class C2wPathWork(C2wCommon):
         self.bup_pth = None
         self.inpath = None
         self.src_file = None
-        self.rec_webp = None
+        self.recode_webp = None
         self.conv_ani = None
 
     def check_inpath(self):
@@ -189,9 +189,9 @@ class C2wMain(C2wPathWork):
         super().__init__()
         self.inpath = pt(inp)
         self.set_quali(quali, ani_mix)
-        self.rec_webp = kwargs.get('rec_webp')
+        self.recode_webp = kwargs.get('recode_webp')
         self.conv_ani = kwargs.get('conv_ani')
-        self.treat_orgs = kwargs.get('treat_orgs')
+        self.handle_src = kwargs.get('handle_src')
 
     # TODO: Quali setting in init... overhaul it
     def set_quali(self, quali, ani_mix):
@@ -232,9 +232,9 @@ class C2wMain(C2wPathWork):
 
     def orgs_switch(self, src_f):
         """Handles the orginal files if option is given."""
-        if self.treat_orgs == 'backup':
+        if self.handle_src == 'backup':
             self.orgs_bup(src_f)
-        elif self.treat_orgs == 'erase' and pt(src_f).suffix != 'webp':
+        elif self.handle_src == 'erase' and pt(src_f).suffix != 'webp':
             pt(src_f).unlink()
 
     def mp_worker(self, inp):
@@ -259,7 +259,7 @@ class C2wMain(C2wPathWork):
         except OSError:
             self.inf(1, f"Image {mp_conv_f} could not be converted.")
 
-        if self.treat_orgs:
+        if self.handle_src:
             self.orgs_switch(mp_conv_f)
 
     @staticmethod
@@ -362,7 +362,7 @@ def main(cfg):
         raise Exception("Must be executed in Python 3.6 or later.\n"
                         f"You are running {sys.version}")
     c2w = C2wMain(cfg.inp, cfg.qua, cfg.ani_m, cfg.verbose,
-                  rec_webp=cfg.r_webp, conv_ani=cfg.c_ani, treat_orgs=cfg.orgs)
+                  recode_webp=cfg.r_webp, conv_ani=cfg.c_ani, handle_src=cfg.orgs)
     c2w.c2w_control()
 
 
