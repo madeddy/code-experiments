@@ -29,7 +29,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.23.0-alpha'
+__version__ = '0.24.0-alpha'
 
 
 class C2wCommon:
@@ -118,8 +118,23 @@ class C2wPathWork(C2wCommon):
         """Returns the mime type of a file."""
         return magic.from_file(str(self.src_file), mime=True).split('/')
 
+    def big_img_assert(self, err):
+        """Ask's user if to proceed on huge files (DecompressionBombError)."""
+        self.inf(0, f"{err}\n", m_sort='warn')
+        que = f"Type `yes` to proceed or `no` to skip the file. \
+        \x1b[93mThats a serious risk, so be sure!\x1b[0m"
+        ans = str(input(que)).lower()
+        while True:
+            if "no" in ans.lower():
+                self.inf(0, f"Skipping very big file {self.src_file}.")
+                C2wMain.file_count['fle_skip'] += 1
+                return False
+            if "yes" in ans.lower():
+                self.inf(0, f"Proceeding with file {self.src_file}.")
+                return True
+
     def dirwalker(self):
-        """Searches a dir for images, filters and provides them as a list."""
+        """Searches a directory for images, filters and provides them as a list."""
 
         img_list = list()
         for path, dirs, files in os.walk(self.inpath):
@@ -132,7 +147,7 @@ class C2wPathWork(C2wCommon):
 
                 m_type, f_type = self.get_mimetype()
                 if self.skip_check(m_type, f_type):
-                    C2W.file_count['fle_skip'] += 1
+                    C2wMain.file_count['fle_skip'] += 1
                     continue
 
                 try:
@@ -140,40 +155,32 @@ class C2wPathWork(C2wCommon):
                     Image.open(self.src_file)
 
                     if self.test_ani(f_type) is False:
-                        C2W.file_count['stl_f_found'] += 1
+                        C2wMain.file_count['stl_f_found'] += 1
                         img_state = "stl"
                     else:
                         if self.conv_ani is True:
                             # placing counter in worker funcs doesn't work
-                            C2W.file_count['ani_f_found'] += 1
+                            C2wMain.file_count['ani_f_found'] += 1
                             img_state = "ani"
                         else:
-                            C2W.file_count['fle_skip'] += 1
+                            C2wMain.file_count['fle_skip'] += 1
                             continue
 
                     img_list.append((self.src_file, img_state))
 
-                except OSError as err:
+                except Image.UnidentifiedImageError as err:
                     self.inf(1, f"{err}\nFormat is not supported by Pillow. Skipped.")
-                    C2W.file_count['fle_skip'] += 1
+                    C2wMain.file_count['fle_skip'] += 1
                     continue
 
                 except Image.DecompressionBombError as err:
-                    self.inf(0, f"{err}\n")
-                    que = f"To proceed type <yes> or skip the file with <no>. \
-                    Thats a serious risk, so be sure!"
-                    ans = str(input(que)).lower()
-                    if ans == "yes":
-                        self.inf(0, f"Proceeding with file {self.src_file}.")
-                    elif ans == "no":
-                        self.inf(0, f"Skipping very big file {self.src_file}.")
-                        C2W.file_count['fle_skip'] += 1
+                    if not self.big_img_assert(err):
                         continue
 
         return img_list
 
 
-class C2W(C2wPathWork):
+class C2wMain(C2wPathWork):
     """Main class with all functionality for converting images to webp."""
 
     def __init__(self, inp, quali, ani_mix=False, verbose=None, **kwargs):
@@ -220,9 +227,7 @@ class C2W(C2wPathWork):
         """Clones the dir structure in a bup dir and moves given files there."""
         dst_f = self.bup_pth.joinpath(src_f.relative_to(self.inpath))
         dst_f_par = dst_f.parent
-
-        if not dst_f_par.exists():
-            dst_f_par.mkdir(parents=True, exist_ok=True)
+        self.make_dirstruct(dst_f_par)
         shutil.move(str(src_f), dst_f)
 
     def orgs_switch(self, src_f):
@@ -241,15 +246,15 @@ class C2W(C2wPathWork):
             if img_state == "stl":
                 with Image.open(mp_conv_f) as ofi:
                     ofi.save(dst_f, 'webp', **self.quali, method=3)
-                with C2W.mp_stl_count.get_lock():
-                    C2W.mp_stl_count.value += 1
+                with C2wMain.mp_stl_count.get_lock():
+                    C2wMain.mp_stl_count.value += 1
 
             elif img_state == "ani":
                 # NOTE: needs duration arg or the conv. anim. files play too slow
                 with Image.open(mp_conv_f) as ofi:
                     ofi.save(dst_f, 'webp', **self.quali_ani, duration=ofi.info['duration'], save_all=True, method=3)
-                with C2W.mp_ani_count.get_lock():
-                    C2W.mp_ani_count.value += 1
+                with C2wMain.mp_ani_count.get_lock():
+                    C2wMain.mp_ani_count.value += 1
 
         except OSError:
             self.inf(1, f"Image {mp_conv_f} could not be converted.")
@@ -272,7 +277,7 @@ class C2W(C2wPathWork):
         self.check_bup()
 
         img_list = self.dirwalker()
-        item_count = C2W.file_count['stl_f_found'] + C2W.file_count['ani_f_found']
+        item_count = C2wMain.file_count['stl_f_found'] + C2wMain.file_count['ani_f_found']
 
         mp_count = self.set_cpu_num()
         with mp.Pool(mp_count) as pool:
@@ -282,7 +287,7 @@ class C2W(C2wPathWork):
             pool.join()
 
         self.trans_count()
-        self.inf(1, f"\nCompleted.\n{C2W.file_count['stl_f_done']!s} still images where converted and {C2W.file_count['fle_skip']!s} files omitted.")
+        self.inf(1, f"\nCompleted.\n{C2wMain.file_count['stl_f_done']!s} still images where converted and {C2wMain.file_count['fle_skip']!s} files omitted.")
 
 
 def parse_args():
@@ -356,8 +361,8 @@ def main(cfg):
     if not sys.version_info[:2] >= (3, 6):
         raise Exception("Must be executed in Python 3.6 or later.\n"
                         f"You are running {sys.version}")
-    c2w = C2W(cfg.inp, cfg.qua, cfg.ani_m, cfg.verbose,
-              rec_webp=cfg.r_webp, conv_ani=cfg.c_ani, treat_orgs=cfg.orgs)
+    c2w = C2wMain(cfg.inp, cfg.qua, cfg.ani_m, cfg.verbose,
+                  rec_webp=cfg.r_webp, conv_ani=cfg.c_ani, treat_orgs=cfg.orgs)
     c2w.c2w_control()
 
 
