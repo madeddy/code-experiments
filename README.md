@@ -1,4 +1,6 @@
-# Code experiments
+# Code experiments legacy branch
+> This are just the old variants of the files. Boring and possible weak code.
+
 This repo holds some of my learning experience with coding. Don't expect much. You're warned!
 
 ## Subdir content
@@ -9,4 +11,3 @@ This repo holds some of my learning experience with coding. Don't expect much. Y
 * Ren'py
   * Some mini scripts
   * Renpy Resource Lister
-* Shell _later.. perhaps_

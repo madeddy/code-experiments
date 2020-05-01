@@ -15,8 +15,6 @@ There are three different coding try's/concepts here for this:
     Is the oldest version but should work.
 * Variant 2: `convert2webp_v2.py`
     Like v1 and a little bit overhauled, but uses a python class.
-* Variant 3: `convert2webp.py`
-    Like v2 but with mutithreading. Quit useful if a massconvert is done.
 
     Note: Converting of animated gif images is deactivated because the encoder is bugged.
     Images come with to slow playback out of it.
