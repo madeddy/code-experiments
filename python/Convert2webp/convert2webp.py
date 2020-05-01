@@ -29,7 +29,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.24.1-alpha'
+__version__ = '0.25.0-alpha'
 
 
 class C2wCommon:
@@ -108,11 +108,7 @@ class C2wPathWork(C2wCommon):
 
     def skip_check(self, m_type, f_type):
         """Different tests wich can cause to skip the file."""
-        if m_type != 'image':
-            return True
-        if f_type == 'webp' and self.rec_webp is False:
-            return True
-        return False
+        bool(m_type != 'image' or f_type == 'webp' and self.recode_webp is False)
 
     def get_mimetype(self):
         """Returns the mime type of a file."""
@@ -203,10 +199,7 @@ class C2wMain(C2wPathWork):
                 raise ValueError("Invalid number input for quality argument.")
             self.quali = {'quality': quali}
 
-        self.quali_ani = self.quali
-        if ani_mix:
-            self.quali_ani = {'allow_mixed': True}
-
+        self.quali_ani = {'allow_mixed': True} if ani_mix else self.quali
 
     def begin_msg(self):
         """Outputs a info about the start state if verbosity is high."""
@@ -266,9 +259,7 @@ class C2wMain(C2wPathWork):
     def set_cpu_num():
         """Sets the number of used CPUs."""
         num_cpu = mp.cpu_count()
-        if num_cpu > 2:
-            return round(num_cpu * 0.75)
-        return 1
+        return round(num_cpu * 0.75) if num_cpu > 2 else 1
 
     def c2w_control(self):
         """This manages all processing steps."""
