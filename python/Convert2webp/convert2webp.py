@@ -29,7 +29,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.27.0-alpha'
+__version__ = '0.28.0-alpha'
 
 
 class C2wCommon:
@@ -203,12 +203,6 @@ class C2wMain(C2wPathWork):
         if 'allow_mixed' in self.quali_ani.keys():
             self.inf(2, "Animated images are set to mixed compression.")
 
-    @classmethod
-    def trans_count(cls):
-        """Transfers the multprocessing counters to the counter dict."""
-        cls.file_count['stl_f_done'] = cls.mp_stl_count.value
-        cls.file_count['ani_f_done'] = cls.mp_ani_count.value
-
     def orgs_bup(self, src_f):
         """Clones the dir structure in a bup dir and moves given files there."""
         dst_f = self.bup_pth.joinpath(src_f.relative_to(self.inpath))
@@ -223,25 +217,31 @@ class C2wMain(C2wPathWork):
         elif self.handle_src == 'erase' and pt(src_f).suffix != 'webp':
             pt(src_f).unlink()
 
+    def stl_converter(self, src, dst):
+        """Convert method for still images."""
+        with Image.open(src) as ofi:
+            ofi.save(dst, 'webp', **self.quali, method=3)
+        with C2wMain.file_count['stl_f_done'].get_lock():
+            C2wMain.file_count['stl_f_done'].value += 1
+
+    def ani_converter(self, src, dst):
+        """Convert method for animated images.
+        # NOTE: needs duration arg or the conv. anim. files play too slow"""
+        with Image.open(src) as ofi:
+            ofi.save(dst, 'webp', **self.quali_ani, duration=ofi.info['duration'], save_all=True, method=3)
+        with C2wMain.file_count['ani_f_done'].get_lock():
+            C2wMain.file_count['ani_f_done'].value += 1
+
     def mp_worker(self, inp):
-        """Convert method for still images with multiprocessing capapility."""
+        """Convert method for images with multiprocessing capapility."""
         mp_conv_f, img_state = inp
         dst_f = pt(mp_conv_f).with_suffix('.webp')
 
         try:
             if img_state == "stl":
-                with Image.open(mp_conv_f) as ofi:
-                    ofi.save(dst_f, 'webp', **self.quali, method=3)
-                with C2wMain.mp_stl_count.get_lock():
-                    C2wMain.mp_stl_count.value += 1
-
+                self.stl_converter(mp_conv_f, dst_f)
             elif img_state == "ani":
-                # NOTE: needs duration arg or the conv. anim. files play too slow
-                with Image.open(mp_conv_f) as ofi:
-                    ofi.save(dst_f, 'webp', **self.quali_ani, duration=ofi.info['duration'], save_all=True, method=3)
-                with C2wMain.mp_ani_count.get_lock():
-                    C2wMain.mp_ani_count.value += 1
-
+                self.ani_converter(mp_conv_f, dst_f)
         except OSError:
             self.inf(1, f"Image {mp_conv_f} could not be converted.")
 
@@ -270,8 +270,6 @@ class C2wMain(C2wPathWork):
             pool.close()
             pool.join()
 
-        self.trans_count()
-        # self.trans_count()
         self.inf(1, "Completed."
                  f"{C2wMain.file_count['stl_f_done'].value!s} still images where "
                  f"converted and {C2wMain.file_count['fle_skip']!s} files omitted.")
