@@ -29,7 +29,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.26.0-alpha'
+__version__ = '0.27.0-alpha'
 
 
 class C2wCommon:
@@ -37,15 +37,11 @@ class C2wCommon:
 
     name = 'Convert to Webp'
     verbosity = 1
-    file_count = {
-        'stl_f_found': 0,
-        'ani_f_found': 0,
-        'fle_skip': 0,
-        'stl_f_done': 0,
-        'ani_f_done': 0}
-    mp_stl_count = mp.Value('i', 0)
-    mp_ani_count = mp.Value('i', 0)
-
+    file_count = {'stl_f_found': 0,
+                  'ani_f_found': 0,
+                  'fle_skip': 0,
+                  'stl_f_done': mp.Value('i', 0),
+                  'ani_f_done': mp.Value('i', 0)}
     quali = {'quality': 80}
     quali_ani = quali
     ani_ext = ['webp', 'gif']
@@ -58,17 +54,17 @@ class C2wCommon:
         """Outputs by the current verboseness level allowed infos."""
         if cls.verbosity >= inf_level:  # TODO: use self.tty ?
             ind1 = f"{cls.name}:\x1b[32m >> \x1b[0m"
-            ind2 = " " * 12
+            ind2 = " " * 20
             if m_sort == 'note':
                 ind1 = f"{cls.name}:\x1b[93m NOTE \x1b[0m> "
-                ind2 = " " * 16
+                ind2 = " " * 24
             elif m_sort == 'warn':
                 ind1 = f"{cls.name}:\x1b[31m WARNING \x1b[0m> "
-                ind2 = " " * 20
+                ind2 = " " * 28
             elif m_sort == 'raw':
                 print(ind1, msg)
                 return
-            print(textwrap.fill(msg, width=90, initial_indent=ind1, subsequent_indent=ind2))
+            print(textwrap.fill(msg, width=90, initial_indent=ind1, subsequent_indent=ind2, replace_whitespace=False))
 
     @classmethod
     def make_dirstruct(cls, dst):
@@ -118,7 +114,7 @@ class C2wPathWork(C2wCommon):
         """Ask's user if to proceed on huge files (DecompressionBombError)."""
         self.inf(0, f"{err}\n", m_sort='warn')
         que = f"Type `yes` to proceed or `no` to skip the file. \
-        \x1b[93mThats a serious risk, so be sure!\x1b[0m"
+              \x1b[93mThats a serious risk, so be sure!\x1b[0m"
         ans = str(input(que)).lower()
         while True:
             if "no" in ans.lower():
@@ -198,12 +194,14 @@ class C2wMain(C2wPathWork):
 
     def begin_msg(self):
         """Outputs a info about the start state if verbosity is high."""
-        if self.quali['quality'] == 80:
-            self.inf(2, f"Encoding stays at standard: lossy, with quality 80.")
+        if 'quality' in self.quali.keys():
+            if 80 in self.quali.values():
+                self.inf(2, f"Encoding stays at standard: lossy, with quality 80.")
+            self.inf(1, f"Quality factor is set to: {self.quali['quality']!s}")
         elif 'lossless' in self.quali.keys():
             self.inf(2, "Encoding is set to lossless.")
-        elif type(self.quali['quality']) is int:
-            self.inf(1, f"Quality factor is set to: {self.quali['quality']!s}")
+        if 'allow_mixed' in self.quali_ani.keys():
+            self.inf(2, "Animated images are set to mixed compression.")
 
     @classmethod
     def trans_count(cls):
@@ -273,7 +271,10 @@ class C2wMain(C2wPathWork):
             pool.join()
 
         self.trans_count()
-        self.inf(1, f"\nCompleted.\n{C2wMain.file_count['stl_f_done']!s} still images where converted and {C2wMain.file_count['fle_skip']!s} files omitted.")
+        # self.trans_count()
+        self.inf(1, "Completed."
+                 f"{C2wMain.file_count['stl_f_done'].value!s} still images where "
+                 f"converted and {C2wMain.file_count['fle_skip']!s} files omitted.")
 
 
 def parse_args():
