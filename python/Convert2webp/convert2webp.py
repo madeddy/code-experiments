@@ -29,7 +29,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.28.1-alpha'
+__version__ = '0.28.2-alpha'
 
 
 class C2wCommon:
@@ -99,12 +99,12 @@ class C2wPathWork(C2wCommon):
             raise FileExistsError("Backup dir already exists and has content. Stoping.")
 
     def test_ani(self, f_type):
-        """Tests if a gif is animated."""
-        return f_type in self.ani_ext and Image.open(self.src_file).is_animated
+        """Tests if the image a gif/webp and animated is."""
+        return bool(f_type in self.ani_ext and Image.open(self.src_file).is_animated)
 
     def skip_check(self, m_type, f_type):
         """Different tests wich can cause to skip the file."""
-        bool(m_type != 'image' or f_type == 'webp' and self.recode_webp is False)
+        return bool(m_type != 'image' or f_type == 'webp' and self.recode_webp is False)
 
     def get_mimetype(self):
         """Returns the mime type of a file."""
