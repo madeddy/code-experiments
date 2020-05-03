@@ -29,7 +29,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.25.0-alpha'
+__version__ = '0.26.0-alpha'
 
 
 class C2wCommon:
@@ -138,39 +138,34 @@ class C2wPathWork(C2wCommon):
                 dirs.remove('img_backup')
 
             for fln in files:
-                img_state = None
                 self.src_file = pt(path).joinpath(fln)
 
                 m_type, f_type = self.get_mimetype()
                 if self.skip_check(m_type, f_type):
                     C2wMain.file_count['fle_skip'] += 1
                     continue
-
+                # assert format support early
                 try:
-                    # make at early sure pillow can work it
                     Image.open(self.src_file)
-
-                    if self.test_ani(f_type) is False:
-                        C2wMain.file_count['stl_f_found'] += 1
-                        img_state = "stl"
-                    else:
-                        if self.conv_ani is True:
-                            # placing counter in worker funcs doesn't work
-                            C2wMain.file_count['ani_f_found'] += 1
-                            img_state = "ani"
-                        else:
-                            C2wMain.file_count['fle_skip'] += 1
-                            continue
-
-                    img_list.append((self.src_file, img_state))
-
                 except Image.UnidentifiedImageError as err:
-                    self.inf(1, f"{err}\nFormat is not supported by Pillow. Skipped.")
+                    self.inf(1, f"{err}"
+                             "Format is not supported by Pillow. Skipped.")
                     C2wMain.file_count['fle_skip'] += 1
                     continue
-
                 except Image.DecompressionBombError as err:
                     if not self.big_img_assert(err):
+                        continue
+
+                if self.test_ani(f_type) is False:
+                    C2wMain.file_count['stl_f_found'] += 1
+                    img_list.append((self.src_file, "stl"))
+                else:
+                    if self.conv_ani is True:
+                        # placing counter in worker funcs doesn't work
+                        C2wMain.file_count['ani_f_found'] += 1
+                        img_list.append((self.src_file, "ani"))
+                    else:
+                        C2wMain.file_count['fle_skip'] += 1
                         continue
 
         return img_list
