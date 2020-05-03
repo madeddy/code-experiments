@@ -29,7 +29,7 @@ __title__ = 'Convert to Webp'
 __license__ = 'MIT'
 __author__ = 'madeddy'
 __status__ = 'Development'
-__version__ = '0.28.0-alpha'
+__version__ = '0.28.1-alpha'
 
 
 class C2wCommon:
@@ -251,7 +251,7 @@ class C2wMain(C2wPathWork):
     @staticmethod
     def set_cpu_num():
         """Sets the number of used CPUs."""
-        num_cpu = mp.cpu_count()
+        num_cpu = os.cpu_count()
         return round(num_cpu * 0.75) if num_cpu > 2 else 1
 
     def c2w_control(self):
@@ -261,14 +261,14 @@ class C2wMain(C2wPathWork):
         self.check_bup()
 
         img_list = self.dirwalker()
-        item_count = C2wMain.file_count['stl_f_found'] + C2wMain.file_count['ani_f_found']
-
+        item_count = C2wMain.file_count['stl_f_found'] \
+                   + C2wMain.file_count['ani_f_found']
         mp_count = self.set_cpu_num()
+
         with mp.Pool(mp_count) as pool:
-            for _ in tqdm(pool.imap_unordered(self.mp_worker, img_list), total=item_count, unit='files'):
+            for _ in tqdm(pool.imap_unordered(self.mp_worker, img_list),
+                          total=item_count, unit='files'):
                 pass
-            pool.close()
-            pool.join()
 
         self.inf(1, "Completed."
                  f"{C2wMain.file_count['stl_f_done'].value!s} still images where "
