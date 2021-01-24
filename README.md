@@ -3,10 +3,10 @@ This repo holds some of my learning experience with coding. Don't expect much. Y
 
 ## Subdir content
 
-* Python
+* Divers
   * Convert2webp
   * Pathfinding experiments
 * Ren'py
   * Some mini scripts
   * Renpy Resource Lister
-* Shell _later.. perhaps_
+* Shell (still empty) _later.. perhaps_
