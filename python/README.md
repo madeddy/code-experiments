@@ -1,2 +1,2 @@
-# Python 
-Some python coding for fun and learning
+# Divers 
+Some python coding for fun, learning and somewhat useful
